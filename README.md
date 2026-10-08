@@ -18,37 +18,54 @@ Every day there is a 10-minute **Daily Set**: tune in, review what is due, learn
 
 ## Run it with the microphone
 
-Browsers only allow the mic on a secure page (https or localhost). The claude.ai preview blocks it, so run the standalone file yourself:
+Browsers only allow the mic on a secure page (https or localhost). The claude.ai preview blocks it, so run it yourself:
 
 ```
 python3 build.py
-python3 -m http.server 8000
-# then open http://localhost:8000/dist/motif-standalone.html
+python3 -m http.server 8000 --directory public
+# then open http://localhost:8000
 ```
 
-Or upload `dist/motif-standalone.html` to any https host (GitHub Pages, your own site). Use headphones so the app's own sounds stay out of the mic.
+Use headphones so the app's own sounds stay out of the mic.
 
 Without a mic, everything works with the on-screen keys, the computer keyboard (A–K = C4–C5, W E T Y U for the black keys, Z/X change octave, Space taps a beat) or a USB MIDI keyboard (Chrome, Edge, Firefox). Chords can be tapped: notes played within about a second and a half count as one chord.
 
 Progress is stored in this browser (localStorage). Accounts and sync come later.
+
+## Deploy to Cloudflare
+
+The repo is ready for Cloudflare Workers (static assets) or Cloudflare Pages; `public/` is the site. Step-by-step instructions are in [`docs/DEPLOYING.md`](docs/DEPLOYING.md). The short version:
+
+```
+npm install
+npx wrangler login
+npm run deploy        # builds public/ and deploys it as the "motif" Worker
+```
+
+Or connect the GitHub repo in **Workers & Pages → Create → Import a repository** (deploy command `npx wrangler deploy`), or create a Pages project with build output directory `public`.
 
 ## Project layout
 
 ```
 docs/PLAN.md         the beginner plan, Levels 1–5
 docs/DEVELOPING.md   how the app is built and how to add a level
+docs/DEPLOYING.md    how to put it online with Cloudflare
 src/pitch.js         listening engine: pitch detection, note tracker, onset detector, chord recognition
 src/theory.js        theory engine: spelled notes, scales, chords, keys, Circle of Fifths, intervals, numerals
 src/app/*.js         the app, one file per part (core, shared components, each level, views, toolbox)
 src/styles*.css      design tokens (light and dark) and components
 src/shell.html       page markup; build.py fills in the CSS and JS
-build.py             writes dist/index.html (artifact) and dist/motif-standalone.html
+src/site/            files copied into the site as is: _headers (mic permission, security), favicon, 404 page
+build.py             writes public/ (the website) and dist/index.html (claude.ai artifact body)
+public/              the built website, committed so it can be deployed as is
+wrangler.jsonc       Cloudflare Workers config (static assets from public/)
 test/                theory, pitch and chord tests (Node); walkthroughs of every level (jsdom)
 ```
 
 ## Build and test
 
 ```
-npm install        # jsdom, for the walkthrough tests
+npm install        # jsdom for the walkthrough tests, wrangler for Cloudflare
 npm test           # builds, then runs every test
+npm run preview    # the site on Cloudflare's local runtime, http://localhost:8787
 ```

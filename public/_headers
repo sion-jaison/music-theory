@@ -1,0 +1,18 @@
+# Response headers for Cloudflare Workers static assets and Cloudflare Pages.
+# The microphone and MIDI are allowed for this site only; the page is never framed by other sites.
+# Scripts and styles are inline (the whole app is one page); fonts come from Google Fonts.
+/*
+  Permissions-Policy: microphone=(self), midi=(self), camera=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# The app is one HTML file: always check for a newer version
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+
+/favicon.svg
+  Cache-Control: public, max-age=86400

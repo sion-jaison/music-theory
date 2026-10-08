@@ -6,6 +6,7 @@ How the app is put together, and how to add or change a level. Read `docs/PLAN.m
 
 ```
 src/shell.html         page markup; build.py fills in CSS and JS
+src/site/              copied into public/ as is: _headers, favicon.svg, 404.html
 src/styles.css         design tokens (light and dark) and base components
 src/styles/*.css       more styles, concatenated in name order (10-components.css, then one per level)
 src/pitch.js           listening engine: pitch detection, note tracker, onset detector, chord recognition
@@ -26,7 +27,7 @@ test/                  Node tests (theory, pitch, chord) and jsdom walkthroughs 
 
 All `src/app` files share one scope, so a function or `const` defined in an earlier file is visible in later ones. Names must be unique across files. Function declarations are hoisted; `const` values are not, so top-level code may only use constants from earlier files.
 
-`python3 build.py` writes `dist/index.html` (artifact body) and `dist/motif-standalone.html` (complete page). `MOTIF_DIST=/some/dir python3 build.py` builds elsewhere; tests read `MOTIF_PAGE` (default `dist/motif-standalone.html`).
+`python3 build.py` writes `public/` (the website: `index.html`, the complete app in one page, plus everything in `src/site/`) and `dist/index.html` (the page body for a claude.ai artifact). `MOTIF_PUBLIC=/some/dir` and `MOTIF_DIST=/some/dir` build elsewhere; tests read `MOTIF_PAGE` (default `public/index.html`). Commit `public/` with source changes: it is what Cloudflare deploys (see `docs/DEPLOYING.md`).
 
 ## Tests
 
@@ -34,7 +35,7 @@ All `src/app` files share one scope, so a function or `const` defined in an earl
 npm install            # jsdom, once
 npm test               # build, then every test
 node test/theory.test.js
-MOTIF_PAGE=/tmp/x/motif-standalone.html node test/level3.js
+MOTIF_PAGE=/tmp/x/index.html node test/level3.js
 ```
 
 Walkthrough tests use `test/helpers.js`:

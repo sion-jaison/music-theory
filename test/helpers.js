@@ -4,7 +4,7 @@
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
-const PAGE = process.env.MOTIF_PAGE || __dirname + '/../dist/motif-standalone.html';
+const PAGE = process.env.MOTIF_PAGE || __dirname + '/../public/index.html';
 /* computer-key letter for each pitch class, from the app's A–K map (C D E F G A B with W E T Y U for black keys) */
 const PC_KEY = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j'];
 

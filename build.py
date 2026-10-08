@@ -1,14 +1,18 @@
-"""Assemble Motif into two pages:
-   dist/index.html             page content for the claude.ai artifact (the host adds the document skeleton)
-   dist/motif-standalone.html  a complete document to open from your own site or localhost, where the mic works
+"""Assemble Motif.
+
+   public/              the website: deploy this folder (Cloudflare Workers or Pages, or any static host)
+     index.html         the complete app in one page
+     _headers, …        everything in src/site/, copied as is (response headers, favicon)
+   dist/index.html      page content for a claude.ai artifact (the host adds the document skeleton)
 
    CSS:  src/styles.css, then src/styles/*.css in name order
    JS:   src/pitch.js as its own script (listening engine, globals)
          one strict-mode wrapper holding src/theory.js, then src/app/*.js in name order
 
-   Set MOTIF_DIST to build somewhere other than dist/ (the tests read MOTIF_PAGE).
+   MOTIF_PUBLIC and MOTIF_DIST build somewhere else; the tests read MOTIF_PAGE (default public/index.html).
 """
 import os
+import shutil
 from pathlib import Path
 
 root = Path(__file__).parent
@@ -37,8 +41,19 @@ dist.mkdir(parents=True, exist_ok=True)
 
 RESET = (":root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}"
          "body{margin:0;font:14px system-ui,sans-serif;background:#fafafa}img{max-width:100%}[hidden]{display:none!important}")
-standalone = ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-              "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
+HEAD = ("<meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
+        "<meta name=\"description\" content=\"Learn music theory by playing: Motif listens to the notes and chords you play and builds your skills a little every day.\">"
+        "<meta name=\"theme-color\" content=\"#2C43D4\">"
+        "<link rel=\"icon\" href=\"favicon.svg\" type=\"image/svg+xml\">")
+standalone = (f"<!doctype html><html lang=\"en\"><head>{HEAD}"
               f"<style>{RESET}</style></head><body>\n{page}\n</body></html>\n")
-(dist / "motif-standalone.html").write_text(standalone)
-print("built", len(page) // 1024, "KB")
+
+public = Path(os.environ.get("MOTIF_PUBLIC", root / "public"))
+if public.resolve() in (root.resolve(), src.resolve()) or (public / ".git").exists():
+    raise SystemExit(f"refusing to replace {public}: point MOTIF_PUBLIC at a build folder")
+if public.exists():
+    shutil.rmtree(public)
+shutil.copytree(src / "site", public)
+(public / "index.html").write_text(standalone)
+print("built", len(page) // 1024, "KB:", public / "index.html", "and", dist / "index.html")
