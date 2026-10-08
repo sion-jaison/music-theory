@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
-const html = fs.readFileSync(__dirname + '/../dist/motif-standalone.html', 'utf8');
+const html = fs.readFileSync(process.env.MOTIF_PAGE || __dirname + '/../dist/motif-standalone.html', 'utf8');
 const errors = [];
 const dom = new JSDOM(html, {
   url: 'http://localhost/', runScripts: 'dangerously', pretendToBeVisual: true,

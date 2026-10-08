@@ -1,0 +1,59 @@
+/* ---------- Level 4: the clock ---------- */
+
+/* circle beside its panel; stacked on phones */
+.l4-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: center; }
+@media (max-width: 720px) {
+  .l4-split { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  /* in play tasks the prompt comes first on a phone; the clock follows as the map */
+  .l4-split.l4-taskfirst > .l4-circle { order: 2; }
+  .l4-split.l4-taskfirst .l4-circle .circle5 { max-width: 300px; }
+}
+.l4-circle { min-width: 0; }
+.l4-circle .circle5 { max-width: 380px; }
+.l4-split .l4-circle .circle5 { max-width: 360px; }
+.art .l4-circle .circle5 { margin: 0; }
+.l4-qcircle .circle5 { max-width: 260px; margin: 0; }
+.l4-info { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.l4-info h3 { font-size: 22px; }
+.l4-staff { overflow-x: auto; }
+.l4-staff .nstaff { width: 100%; max-width: 400px; height: auto; }
+.l4-walk, .l4-chords { display: grid; gap: 14px; min-width: 0; align-content: start; }
+
+/* key signatures drawn at one size, whatever their width */
+.l4-sig { min-width: 0; }
+.l4-sig .nstaff, .art .l4-sig .nstaff, .q-art .l4-sig .nstaff { width: auto; height: 120px; max-width: 100%; }
+.l4-sig.grand .nstaff, .art .l4-sig.grand .nstaff { height: 230px; }
+
+/* captioned pictures side by side */
+.l4-figs { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-end; }
+.l4-figs figure { margin: 0; display: grid; gap: 4px; justify-items: start; min-width: 0; max-width: 100%; }
+.l4-figs figcaption { font-size: 13px; color: var(--muted); }
+.hook + .hook { margin-top: -2px; }
+
+/* play-the-tonic task */
+.l4-keytask { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+.l4-keyside { display: grid; gap: 10px; }
+.l4-ask { font-family: var(--f-display); font-weight: 800; font-size: 26px; line-height: 1.15; }
+
+/* fill the clock */
+.l4-clockbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.l4-clockbar .chip { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.l4-clock .circle5 { max-width: 400px; }
+.l4-clock .circle5 .hubtxt { font-size: 26px; }
+.l4-clock .circle5 .hubtxt.sub { font-size: 13px; }
+.l4-hide-minor .wedge.minor:not(.ok) .mname { visibility: hidden; }
+
+/* the family slice as a 3 × 2 grid: IV I V over ii vi iii */
+.l4-six { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; max-width: 340px; }
+.l4-six div { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 10px; background: var(--glow-soft); min-width: 0; }
+.l4-six div.in { background: var(--surface-2); }
+.l4-six span { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.l4-six b { font-family: var(--f-display); font-size: 20px; line-height: 1.1; }
+
+/* minor mood */
+.l4-mood { display: grid; gap: 12px; }
+.l4-line { display: grid; gap: 4px; }
+.notes-strip .n.l4-was { box-shadow: inset 0 -3px 0 var(--glow); }
+.notes-strip .n.l4-flip { border: 0; font: inherit; font-family: var(--f-mono); font-weight: 700; background: var(--glow-soft); color: var(--ink); box-shadow: inset 0 0 0 2px var(--glow); }
+.notes-strip .n.l4-flip.undone { background: var(--surface-2); color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); }
+.l4-chordline { font-family: var(--f-mono); font-size: 14px; color: var(--muted); }
