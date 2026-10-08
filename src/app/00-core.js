@@ -38,7 +38,7 @@ const Store = {
   key: 'motif.v1',
   data: null,
   defaults() {
-    return { v: 1, settings: { labels: true, micLatency: 40 }, units: {}, cards: {}, streak: { count: 0, last: null, rest: null }, sketches: [], range: null, history: {}, bossPassed: false };
+    return { v: 1, settings: { labels: true, micLatency: 40 }, units: {}, cards: {}, streak: { count: 0, last: null, rest: null }, sketches: [], range: null, history: {}, bossPassed: false, viewLevel: null, bests: {} };
   },
   load() {
     let d = null;
@@ -50,7 +50,8 @@ const Store = {
   day() {
     const t = todayStr();
     const h = this.data.history;
-    if (!h[t]) h[t] = { revMs: [], revOk: 0, revN: 0, tuneOk: 0, tuneN: 0, earOk: 0, earN: 0, done: false };
+    if (!h[t]) h[t] = { revMs: [], revOk: 0, revN: 0, tuneOk: 0, tuneN: 0, earOk: 0, earN: 0, done: false, wins: [] };
+    if (!h[t].wins) h[t].wins = [];
     return h[t];
   }
 };
@@ -130,6 +131,23 @@ const Sound = {
    ================================================================= */
 const Mic = {
   state: 'off', stream: null, analyser: null, buf: null, detect: null, track: null, onset: null, raf: 0, frame: 0, level: 0,
+  src: null, chordUsers: 0, an2: null, db: null, ctrack: null,
+  /* chord listening runs only while a chord task needs it: a second, finer analyser (16384-point FFT) */
+  wantChords(on) { this.chordUsers = Math.max(0, this.chordUsers + (on ? 1 : -1)); this.setupChords(); },
+  setupChords() {
+    const need = this.chordUsers > 0 && this.state === 'on' && typeof analyzeSpectrum === 'function';
+    if (need && !this.an2) {
+      this.an2 = Sound.ctx.createAnalyser();
+      this.an2.fftSize = 16384; this.an2.smoothingTimeConstant = 0.5;
+      this.src.connect(this.an2);
+      this.db = new Float32Array(this.an2.frequencyBinCount);
+      this.ctrack = createChordTracker({});
+    } else if (!need && this.an2) {
+      try { this.src.disconnect(this.an2); } catch (e) { /* already gone */ }
+      this.an2 = null; this.db = null; this.ctrack = null;
+      Bus.emit('chroma', null);
+    }
+  },
   async start() {
     if (this.state === 'on') return true;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.isSecureContext) { this.set('unsupported'); return false; }
@@ -141,7 +159,7 @@ const Mic = {
       this.set(e && e.name === 'NotFoundError' ? 'nodevice' : 'blocked');
       return false;
     }
-    const src = ctx.createMediaStreamSource(this.stream);
+    const src = this.src = ctx.createMediaStreamSource(this.stream);
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 2048;
     src.connect(this.analyser);
@@ -150,6 +168,7 @@ const Mic = {
     this.track = createNoteTracker({});
     this.onset = createOnsetDetector({});
     this.set('on');
+    this.setupChords();
     const step = () => { this.raf = requestAnimationFrame(step); this.tick(); };
     this.raf = requestAnimationFrame(step);
     return true;
@@ -159,6 +178,7 @@ const Mic = {
     if (this.stream) this.stream.getTracks().forEach(t => t.stop());
     this.stream = null; this.level = 0;
     this.set('off');
+    this.setupChords();
   },
   set(s) { this.state = s; Bus.emit('mic', s); },
   tick() {
@@ -178,12 +198,22 @@ const Mic = {
       if (off !== null) Bus.emit('noteoff', { midi: off, source: 'mic' });
     }
     this.frame++;
-    if (this.frame % 2) return;
+    if (this.frame % 2) { this.chordTick(gate); return; }
     const r = rms > 0.008 ? this.detect(b) : { freq: 0, clarity: 0, rms: rms };
     const o = this.track.update(r, gate);
     if (o.off !== null) Bus.emit('noteoff', { midi: o.off, source: 'mic' });
     if (o.on !== null) Bus.emit('note', { midi: o.on, source: 'mic', t: t });
     Bus.emit('pitch', { midiFloat: o.midiFloat, clarity: r.clarity, rms: rms });
+  },
+  chordTick(gate) {
+    if (!this.an2) return;
+    this.an2.getFloatFrequencyData(this.db);
+    const a = gate ? analyzeSpectrum(this.db, Sound.ctx.sampleRate, this.an2.fftSize) : null;
+    const m = a ? matchChord(a.chroma, { bassPc: a.bassPc }) : null;
+    Bus.emit('chroma', a);
+    const o = this.ctrack.update(m);
+    if (o.off) Bus.emit('chordoff', { source: 'mic' });
+    if (o.on) Bus.emit('chord', chordEvent('mic', o.on.pcs, a && a.bassPc >= 0 ? a.bassPc : o.on.root, o.on.root, o.on.quality));
   }
 };
 

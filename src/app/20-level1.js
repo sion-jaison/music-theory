@@ -1,8 +1,7 @@
 /* =================================================================
    Level 1 content
    ================================================================= */
-const ARC = ['Hear', 'Echo', 'Explore', 'Name', 'Create'];
-const UNITS = [
+const L1_UNITS = [
   { id: '1.1', title: 'What a note is', blurb: 'Turn vibration into a dot you can steer.', steps: [
     { k: 'card', tag: 'Hear', title: 'Low, then high', play: [{ m: 45, t: 0, d: 0.9 }, { m: 76, t: 1.0, d: 0.9 }], playLabel: 'Play two notes', body: '<p>Press play: a low note, then a high one.</p><p>Every sound is something vibrating: a string, your vocal cords, a speaker. The faster it vibrates, the higher it sounds. That height is called <b>pitch</b>.</p>' },
     { k: 'task', tag: 'Echo', type: 'climb', p: { dir: 1, prompt: 'Make the dot climb: play or sing three notes, each higher than the last.' } },
@@ -61,7 +60,7 @@ const UNITS = [
 ];
 
 /* Review deck: unlocked when the unit that teaches it is finished */
-const CARD_DEFS = {
+const L1_CARDS = {
   '1.1': [{ id: 'q-pitch', type: 'choice', q: 'A string starts vibrating faster. The note sounds…', options: ['Higher', 'Lower', 'Only louder'], answer: 0 }],
   '1.2': [
     { id: 'q-oct-hz', type: 'choice', q: 'A4 vibrates 440 times a second. How fast does A5 vibrate?', options: ['220 Hz', '660 Hz', '880 Hz'], answer: 2 },
@@ -81,3 +80,48 @@ const CARD_DEFS = {
     { id: 'q-24', type: 'choice', q: 'What does 2/4 time mean?', options: ['Two beats in every bar', 'Two bars per minute', 'Half notes only'], answer: 0 }
   ]
 };
+
+addLevel({
+  n: 1, title: 'Hear It, Find It', tagline: 'Pitch, octaves, the keyboard map, steps, beat and rhythm',
+  units: L1_UNITS, cards: L1_CARDS,
+  passText: 'You can find any note, step by half and whole steps, keep a steady beat and read basic rhythms.',
+  create: {
+    params: { blackOnly: true, min: 3, max: 8 },
+    prompts: [
+      'Make a 4-note motif on black keys that climbs, then falls.',
+      'Make a motif that starts and ends on the same note.',
+      'Make a motif with one big jump in it.',
+      'Make a motif that uses only two different notes.',
+      'Make a motif that sounds like a question.',
+      'Repeat one note three times, then move. Make that a motif.'
+    ]
+  },
+  ear: {
+    title: 'Higher or lower?', sub: 'Two notes. Was the second one higher or lower than the first?',
+    run(body, finish) {
+      let r = 0, a = 0, b = 0, ok = 0, timer = 0;
+      body.innerHTML = `<div class="row">${playBtn('Hear them again')}<div class="progress-dots">${'<span></span>'.repeat(5)}</div></div><div class="choices"><button type="button" class="choice" data-v="1">Higher</button><button type="button" class="choice" data-v="-1">Lower</button></div><p class="fb info" aria-live="polite"></p>`;
+      const fbEl = body.querySelector('.fb'), dots = body.querySelectorAll('.progress-dots span'), box = body.querySelector('.choices');
+      const play = () => Sound.seq([{ m: a, t: 0, d: 0.6 }, { m: b, t: 0.75, d: 0.6 }]);
+      function next() {
+        const gap = r < 2 ? randInt(4, 7) : r < 4 ? randInt(2, 3) : 1;
+        a = randInt(55, 68); b = a + (Math.random() < 0.5 ? gap : -gap);
+        box.querySelectorAll('.choice').forEach(c => { c.className = 'choice'; c.disabled = false; });
+        play();
+      }
+      body.querySelector('[data-act="play"]').onclick = play;
+      box.onclick = ev => {
+        const c = ev.target.closest('.choice'); if (!c || c.disabled) return;
+        const right = Math.sign(b - a) === +c.dataset.v;
+        box.querySelectorAll('.choice').forEach(x => { x.disabled = true; });
+        c.classList.add(right ? 'right' : 'wrong'); dots[r].classList.add(right ? 'on' : 'miss');
+        if (right) ok++;
+        fb(fbEl, right ? 'good' : 'bad', `${noteName(a)} → ${noteName(b)}: ${Math.abs(b - a)} half step${Math.abs(b - a) > 1 ? 's' : ''} ${b > a ? 'up' : 'down'}.`);
+        r++;
+        if (r >= 5) finish(ok, 5); else timer = setTimeout(next, 1300);
+      };
+      timer = setTimeout(next, 250);
+      return () => clearTimeout(timer);
+    }
+  }
+});

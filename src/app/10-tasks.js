@@ -373,7 +373,7 @@ Tasks.echo = (el, p, done) => {
 
 Tasks.motif = (el, p, done) => {
   let notes = [], rec = false, tStart = 0;
-  el.innerHTML = `<p class="prompt">${p.prompt}</p><div class="notes-strip"></div><div class="row"><button type="button" class="btn primary" data-act="rec">● Record</button><button type="button" class="btn" data-act="play" disabled>▶ Play back</button><button type="button" class="btn ghost" data-act="clear" disabled>Clear</button></div><div class="field"><label for="motif-name">Name it</label><input id="motif-name" type="text" maxlength="40" placeholder="e.g. Rain on the roof"></div><div class="row"><button type="button" class="btn primary" data-act="save" disabled>Save to sketchbook</button></div><p class="fb info" aria-live="polite">${p.blackOnly ? 'Black keys only. Any order sounds good.' : ''}</p>`;
+  el.innerHTML = `<p class="prompt">${p.prompt}</p><div class="notes-strip"></div><div class="row"><button type="button" class="btn primary" data-act="rec">● Record</button><button type="button" class="btn" data-act="play" disabled>▶ Play back</button><button type="button" class="btn ghost" data-act="clear" disabled>Clear</button></div><div class="field"><label for="motif-name">Name it</label><input id="motif-name" type="text" maxlength="40" placeholder="e.g. Rain on the roof"></div><div class="row"><button type="button" class="btn primary" data-act="save" disabled>Save to sketchbook</button></div><p class="fb info" aria-live="polite">${p.blackOnly ? 'Black keys only. Any order sounds good.' : (p.rule || '')}</p>`;
   const strip = el.querySelector('.notes-strip'), f = el.querySelector('.fb');
   const bRec = el.querySelector('[data-act="rec"]'), bPlay = el.querySelector('[data-act="play"]'), bClear = el.querySelector('[data-act="clear"]'), bSave = el.querySelector('[data-act="save"]'), name = el.querySelector('#motif-name');
   const max = p.max || 8, min = p.min || 3;
@@ -385,12 +385,13 @@ Tasks.motif = (el, p, done) => {
   bPlay.onclick = () => Sound.seq(notes.map(n => ({ m: n.m, t: n.t, d: 0.4 })));
   bClear.onclick = () => { notes = []; paint(); };
   bSave.onclick = () => {
-    const s = saveSketch({ name: name.value.trim() || 'Motif ' + (Store.data.sketches.length + 1), notes, prompt: p.prompt });
+    const s = saveSketch(Object.assign({ name: name.value.trim() || 'Motif ' + (Store.data.sketches.length + 1), notes, prompt: p.prompt, level: p.level }, p.extra || {}));
     fb(f, 'good', `Saved “${s.name}” to your sketchbook.`); bSave.disabled = true; done(true);
   };
   const off = Bus.on('note', d => {
     if (!rec) return;
     if (p.blackOnly && !isBlack(d.midi)) { fb(f, 'bad', `${noteName(d.midi)} is a white key. This motif uses black keys only.`); return; }
+    if (p.pcs && p.pcs.indexOf(mod12(d.midi)) < 0) { fb(f, 'bad', `${noteName(d.midi)} is not in ${p.pcsLabel || 'this scale'}.`); return; }
     if (!notes.length) tStart = d.t || Sound.now();
     notes.push({ m: d.midi, t: Math.max(0, Math.min(8, (d.t || Sound.now()) - tStart)) });
     paint();
@@ -400,24 +401,31 @@ Tasks.motif = (el, p, done) => {
   return off;
 };
 
+/* one multiple-choice question. Optional: p.html (a picture above the choices), p.play (a note list for Sound.seq, or a function) */
 Tasks.choice = (el, p, done) => {
-  el.innerHTML = `<p class="prompt">${p.q}</p><div class="choices">${p.options.map((o, i) => `<button type="button" class="choice" data-i="${i}">${o}</button>`).join('')}</div><p class="fb info" aria-live="polite"></p>`;
+  el.innerHTML = `<p class="prompt">${p.q}</p>${p.html ? `<div class="q-art">${p.html}</div>` : ''}${p.play ? `<div class="row">${playBtn(p.playLabel || 'Hear it')}</div>` : ''}<div class="choices">${p.options.map((o, i) => `<button type="button" class="choice" data-i="${i}">${o}</button>`).join('')}</div><p class="fb info" aria-live="polite"></p>`;
+  const pb = el.querySelector('[data-act="play"]');
+  if (pb) { const play = () => (typeof p.play === 'function' ? p.play() : Sound.seq(p.play)); pb.onclick = play; if (p.autoplay !== false) setTimeout(play, 250); }
   const box = el.querySelector('.choices'), f = el.querySelector('.fb'); let answered = false;
   box.onclick = ev => {
     const b = ev.target.closest('.choice'); if (!b || answered) return;
     answered = true; const ok = +b.dataset.i === p.answer;
     b.classList.add(ok ? 'right' : 'wrong');
     box.querySelector(`[data-i="${p.answer}"]`).classList.add('right');
-    fb(f, ok ? 'good' : 'bad', p.why || (ok ? 'Right.' : 'Not this time.'));
+    fb(f, ok ? 'good' : 'bad', (typeof p.why === 'function' ? p.why(ok) : p.why) || (ok ? 'Right.' : 'Not this time.'));
     done(ok);
   };
   return () => {};
 };
 
+/* A reading card. Optional extras: play (note list, 'metronome' or a function), fret, rhythm, marks (pitch classes to glow on the dock),
+   art (HTML or a function returning HTML, shown under the text), mount(el) for an interactive widget (returns a cleanup). */
 Tasks.card = (el, step) => {
-  el.innerHTML = `<div class="body">${step.body}</div>${step.play ? `<div class="row">${playBtn(step.playLabel)}</div>` : ''}${step.fret ? `<div class="fret">${fretSVG()}</div>` : ''}${step.rhythm ? `<div class="notation">${rhythmSVG(step.rhythm)}</div>` : ''}`;
+  const art = typeof step.art === 'function' ? step.art() : step.art;
+  el.innerHTML = `<div class="body">${step.body}</div>${art ? `<div class="art">${art}</div>` : ''}${step.play ? `<div class="row">${playBtn(step.playLabel)}</div>` : ''}${step.fret ? `<div class="fret">${fretSVG()}</div>` : ''}${step.rhythm ? `<div class="notation">${rhythmSVG(step.rhythm)}</div>` : ''}${step.mount ? '<div class="widget"></div>' : ''}`;
   const b = el.querySelector('[data-act="play"]');
-  if (b) b.onclick = () => { if (step.play === 'metronome') { const ctx = Sound.ensure(); if (!ctx) return; const t0 = ctx.currentTime + 0.1; for (let i = 0; i < 8; i++) Sound.click(t0 + i * 0.75, i % 4 === 0); } else Sound.seq(step.play); };
+  if (b) b.onclick = () => { if (step.play === 'metronome') { const ctx = Sound.ensure(); if (!ctx) return; const t0 = ctx.currentTime + 0.1; for (let i = 0; i < 8; i++) Sound.click(t0 + i * 0.75, i % 4 === 0); } else if (typeof step.play === 'function') step.play(); else Sound.seq(step.play); };
   if (step.marks) Keyboard.markPcs(step.marks, 'hint');
-  return () => Keyboard.clearMarks();
+  const off = step.mount ? step.mount(el.querySelector('.widget')) : null;
+  return () => { if (typeof off === 'function') off(); Keyboard.clearMarks(); };
 };

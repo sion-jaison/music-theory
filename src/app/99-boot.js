@@ -15,4 +15,6 @@ function boot() {
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.isSecureContext)) Mic.set('unsupported');
   go('home');
 }
+/* a handle for tests and the browser console */
+window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keyboard, LEVELS, CARD_DEFS, CARD_TYPES, go, chordTarget, chordHit };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

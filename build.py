@@ -5,7 +5,10 @@
    CSS:  src/styles.css, then src/styles/*.css in name order
    JS:   src/pitch.js as its own script (listening engine, globals)
          one strict-mode wrapper holding src/theory.js, then src/app/*.js in name order
+
+   Set MOTIF_DIST to build somewhere other than dist/ (the tests read MOTIF_PAGE).
 """
+import os
 from pathlib import Path
 
 root = Path(__file__).parent
@@ -28,8 +31,8 @@ page = (shell
         .replace("/*PITCH*/", browser(src / "pitch.js"))
         .replace("/*APP*/", app))
 
-dist = root / "dist"
-dist.mkdir(exist_ok=True)
+dist = Path(os.environ.get("MOTIF_DIST", root / "dist"))
+dist.mkdir(parents=True, exist_ok=True)
 (dist / "index.html").write_text(page)
 
 RESET = (":root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}"

@@ -27,7 +27,8 @@ const check = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); 
   await wait(300);
   check(d.querySelectorAll('.unit').length === 11, 'home shows 11 Level 1 stops');
   check(d.querySelectorAll('.kb .key').length === 25, 'dock keyboard has 25 keys (C3–C5)');
-  check(d.title === 'Motif Level 1', 'page title is set');
+  check(d.title === 'Motif', 'page title is set');
+  check(d.querySelectorAll('.level-tabs button').length >= 1, 'home shows level tabs');
 
   // Unit 1.1
   click('.unit[data-u="1.1"]'); await wait(50);
@@ -79,7 +80,7 @@ const check = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); 
   next(); await wait(50);
 
   // Every other unit opens and every step renders (skip through)
-  for (const id of ['1.2', '1.4', '1.6', '1.7', '1.8', '1.9', '1.M', '1.B']) {
+  for (const id of ['1.2', '1.4', '1.6', '1.7', '1.8', '1.9', '1.M']) {
     click('[data-act="home"]') ; await wait(20);
     click(`.unit[data-u="${id}"]`); await wait(40);
     let guard = 0;
@@ -90,7 +91,23 @@ const check = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); 
     }
     check(!!d.querySelector('.done-card'), `${id} renders every step and finishes`);
   }
+  // Boss: no skipping. Part 1 plays 8 named notes; part 2 keeps the beat.
+  click('[data-act="home"]'); await wait(20);
+  click('.unit[data-u="1.B"]'); await wait(40);
+  next(); await wait(40);
+  check(!d.querySelector('.stage [data-act="skip"]'), 'boss steps cannot be skipped');
+  const PCKEY = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j'];
+  const NAMES = { 'C': 0, 'C♯': 1, 'D♭': 1, 'D': 2, 'D♯': 3, 'E♭': 3, 'E': 4, 'F': 5, 'F♯': 6, 'G♭': 6, 'G': 7, 'G♯': 8, 'A♭': 8, 'A': 9, 'A♯': 10, 'B♭': 10, 'B': 11 };
+  for (let i = 0; i < 8; i++) { key(PCKEY[NAMES[d.querySelector('.big-name').textContent]]); await wait(700); }
+  check(!d.querySelector('.stage [data-act="next"]').disabled, 'boss part 1: eight named notes played in time');
+  next(); await wait(40);
+  const bspb = 0.75, bt0 = w.performance.now() / 1000 + 0.35;
+  click('[data-act="go"]');
+  for (let i = 0; i < 8; i++) { const at = (bt0 + (4 + i) * bspb + 0.02) * 1000; await wait(at - w.performance.now()); key(' '); }
+  await wait(1400);
+  next(); await wait(40);
   check(d.querySelector('.done-card .big').textContent.includes('Level 1 passed'), 'boss finish marks Level 1 passed');
+  check(/Level 2/.test(d.querySelector('.done-card').textContent), 'passing the boss opens Level 2');
 
   // Motif: record black keys, reject a white key, save
   click('[data-act="home"]'); await wait(20);
