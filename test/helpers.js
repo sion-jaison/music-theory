@@ -42,7 +42,8 @@ async function load(opts) {
     async keys(list, gap) { for (const k of list.split(/\s+/).filter(Boolean)) { t.key(k); await wait(gap == null ? 20 : gap); } },
     /* play a pitch class (0–11) or a note name like 'F♯' / 'Bb' on the computer keys */
     pc(x) { t.key(PC_KEY[typeof x === 'number' ? x : nameToPc(x)]); },
-    click(sel) { const el = typeof sel === 'string' ? d.querySelector(sel) : sel; if (!el) throw new Error('missing ' + sel); el.click(); },
+    /* works for SVG elements too (circle wedges), which have no .click() in jsdom */
+    click(sel) { const el = typeof sel === 'string' ? d.querySelector(sel) : sel; if (!el) throw new Error('missing ' + sel); if (typeof el.click === 'function') el.click(); else el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); },
     nextBtn: () => d.querySelector('.stage [data-act="next"]'),
     next() { const b = t.nextBtn(); if (!b) throw new Error('no next button'); if (b.disabled) throw new Error('next still disabled at: ' + (d.querySelector('.stage .tag') || {}).textContent); b.click(); },
     check(cond, msg) { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); if (!cond) { failures++; process.exitCode = 1; } },
