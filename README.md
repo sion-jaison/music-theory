@@ -11,6 +11,7 @@ The beginner section is five levels, planned unit by unit in [`docs/PLAN.md`](do
 | 3 | Stack It | Triads, chord symbols, guitar shapes, inversions, the chords of a key, Roman numerals, 7th chords, arpeggios. Mic chord recognition starts here |
 | 4 | The Clock | Key signatures, the Circle of Fifths, relative and parallel keys, natural, harmonic and melodic minor, chords in minor |
 | 5 | Make It Move | Chord functions, the four-chord loop, 12-bar blues, ii–V–I, cadences, transposing, melody over chords, dynamics, form, your own 8-bar piece |
+| 6 | Groove & Line *(intermediate)* | Compound and odd meters, swing, syncopation, scale degrees by ear, contour, the motive and its tools, sentence and period, non-chord tones, a 16-bar theme with draft, review and version 2 |
 
 The intermediate section, Levels 6–10 (Groove & Line, Colours, Voices, Borrow & Travel, Write the Song), is planned in [`docs/PLAN-INTERMEDIATE.md`](docs/PLAN-INTERMEDIATE.md): composing, ear training and arranging built on the standard theory texts.
 

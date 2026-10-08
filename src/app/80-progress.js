@@ -14,7 +14,10 @@ function nextUnit(n) {
   const lv = levelByN(n || currentLevel());
   return lv ? lv.units.find(u => !unitDone(u.id)) : undefined;
 }
-const beginnerDone = () => LEVELS.length > 0 && levelPassed(LEVELS[LEVELS.length - 1].n);
+const sectionLevels = name => LEVELS.filter(l => l.section === name);
+const sectionDone = name => { const ls = sectionLevels(name); return ls.length > 0 && levelPassed(ls[ls.length - 1].n); };
+const beginnerDone = () => sectionDone('Beginner');
+const isIntermediate = () => { const lv = levelByN(currentLevel()); return !!lv && lv.section === 'Intermediate'; };
 const LADDER = [0, 1, 3, 7, 14, 30];
 function unlockCards(unitId) {
   (CARD_DEFS[unitId] || []).forEach(c => { if (!Store.data.cards[c.id]) Store.data.cards[c.id] = { box: 0, due: todayStr(), n: 0, ok: 0 }; });
@@ -68,4 +71,14 @@ function recordBest(key, value, opts) {
     Store.save();
   }
   return better;
+}
+
+/* bars of notated music saved in the last 7 days (sketches with a score) */
+function barsThisWeek() {
+  const since = addDays(todayStr(), -6);
+  return (Store.data.sketches || []).filter(s => s.score && s.created >= since).reduce((sum, s) => {
+    if (typeof Score === 'undefined') return sum;
+    const bar = Score.meter(s.score.meter || '4/4').barLen;
+    return sum + Math.round(Score.length(s.score.events) / bar);
+  }, 0);
 }

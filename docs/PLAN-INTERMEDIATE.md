@@ -279,3 +279,5 @@ Compared with ABRSM Grades 4–5 theory, RCM Theory Levels 6–8 (through advanc
 - Walkthrough tests cover every unit and boss, as in the beginner section.
 
 The suggested build order is Level 6 with tools 1–3, then Levels 7 and 8 with tools 4–5, then Levels 9 and 10 with tools 6–10.
+
+**Status:** Level 6 is built, with tools 1–3 (rhythm engine, melody capture to notation, drone and key context) plus the Variation Lab half of tool 4, the Ear Gym, 8 Bars a Day and the draft → review → version 2 → compare project steps.

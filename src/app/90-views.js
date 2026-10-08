@@ -50,7 +50,7 @@ function renderHome(levelN) {
   const micLine = Mic.state === 'on' ? '<b>The mic is on.</b> Sing or play and the app follows.' : (Mic.state === 'blocked' || Mic.state === 'unsupported') ? `<b>The mic isn’t available on this page.</b> Everything works with the keys in the dock, your computer keyboard (A to K) or a MIDI keyboard. To use the mic, open the standalone version from your own site or localhost.` : '<b>Use the mic, the keys, or both.</b> Turn on the mic in the dock to sing or play a real instrument; tap the keys or use A to K otherwise.';
   const chip = levelPassed(shown.n) ? '<span class="chip done">Level passed</span>' : open ? `<span class="chip live">${doneN} of ${shown.units.length} done</span>` : '<span class="chip">Locked</span>';
   view.innerHTML = `
-  ${beginnerDone() ? `<section class="panel grad"><div class="eyebrow">Beginner section complete</div><h2>You finished all five beginner levels.</h2><p>Keep your Daily Set going: the review deck keeps every scale, chord and progression fresh while the next section is planned.</p></section>` : ''}
+  ${beginnerDone() ? (() => { const nextSec = LEVELS.find(l => l.section === 'Intermediate'); return `<section class="panel grad"><div class="eyebrow">Beginner section complete</div><h2>You finished all five beginner levels.</h2><p>${nextSec ? `The intermediate section is open: Level ${nextSec.n}, <b>${nextSec.title}</b>, turns what you know into composing, ear training and arranging.` : 'Keep your Daily Set going: the review deck keeps every scale, chord and progression fresh while the next section is planned.'}</p></section>`; })() : ''}
   <div class="grid-2">
     <section class="panel today">
       <div class="eyebrow">Today · ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
@@ -68,9 +68,9 @@ function renderHome(levelN) {
       <div class="stat"><b>${Store.data.range ? noteName(Store.data.range.zl) + '–' + noteName(Store.data.range.zh) : '—'}</b><span>voice home zone</span></div>
     </section>
   </div>
-  <nav class="level-tabs" aria-label="Levels">${LEVELS.map(l => `<button type="button" data-level="${l.n}" aria-current="${l.n === shown.n ? 'true' : 'false'}" class="${levelPassed(l.n) ? 'passed' : levelUnlocked(l.n) ? 'open' : 'locked'}"><span class="mono">${l.n}</span><span class="t">${l.title}</span>${levelPassed(l.n) ? '<span class="st">✓</span>' : levelUnlocked(l.n) ? '' : '<span class="st" aria-label="locked">🔒</span>'}</button>`).join('')}</nav>
+  <div class="level-sections">${SECTIONS.filter(sec => sectionLevels(sec).length).map(sec => `<div class="level-section"><div class="eyebrow">${sec}</div><nav class="level-tabs" aria-label="${sec} levels">${sectionLevels(sec).map(l => `<button type="button" data-level="${l.n}" aria-current="${l.n === shown.n ? 'true' : 'false'}" class="${levelPassed(l.n) ? 'passed' : levelUnlocked(l.n) ? 'open' : 'locked'}"><span class="mono">${l.n}</span><span class="t">${l.title}</span>${levelPassed(l.n) ? '<span class="st">✓</span>' : levelUnlocked(l.n) ? '' : '<span class="st" aria-label="locked">🔒</span>'}</button>`).join('')}</nav></div>`).join('')}</div>
   <section class="panel">
-    <div class="level-head"><div><div class="eyebrow">Level ${shown.n} of ${LEVELS.length}</div><h2>${shown.title}</h2><p class="tagline">${shown.tagline || ''}</p></div>${chip}</div>
+    <div class="level-head"><div><div class="eyebrow">${shown.section} · Level ${shown.n}</div><h2>${shown.title}</h2><p class="tagline">${shown.tagline || ''}</p></div>${chip}</div>
     ${open ? '' : `<div class="locked-note"><span>Pass the Level ${shown.n - 1} boss to open this level. Already know Level ${shown.n - 1}? The boss is also the way to test out.</span><button type="button" class="btn small" data-boss="${shown.n - 1}">Level ${shown.n - 1} boss</button></div>`}
     <div class="staff-wrap">${pathSVG(shown)}</div>
     <div class="units">${shown.units.map(u => {
@@ -97,10 +97,10 @@ function showComplete(unit) {
   const lv = levelByN(unit.level), after = levelByN(unit.level + 1);
   const nx = nextUnit(unit.level) || (unit.boss && after ? after.units[0] : null);
   const cards = (CARD_DEFS[unit.id] || []).length;
-  const last = unit.boss && !after;
-  const big = unit.boss ? (last ? 'Beginner section complete.' : `Level ${unit.level} passed.`) : unit.title + ': done.';
-  const body = cards ? `${cards} review card${cards > 1 ? 's' : ''} joined your deck. They come back on a growing schedule: tomorrow, then 3, 7, 14 and 30 days.` : (unit.doneText || (unit.create ? 'Saved to your sketchbook.' : 'Nice work.'));
-  const pass = unit.boss ? `<p>${lv.passText || ''}${after ? ` Level ${after.n}, <b>${after.title}</b>, is open.` : ''}</p>` : '';
+  const endsSection = unit.boss && (!after || after.section !== lv.section);
+  const big = unit.boss ? (endsSection ? `${lv.section} section complete.` : `Level ${unit.level} passed.`) : unit.title + ': done.';
+  const body = cards ? `${cards} review card${cards > 1 ? 's' : ''} joined your deck. They come back on a growing schedule: tomorrow, then 3, 7, 14 and 30 days.` : (unit.doneText || (unit.create ? 'Saved to your sketchbook.' : unit.workshop ? 'Your workshop sketch is in your sketchbook.' : 'Nice work.'));
+  const pass = unit.boss ? `<p>${lv.passText || ''}${after ? ` ${after.section !== lv.section ? `The ${after.section.toLowerCase()} section starts now: Level ${after.n}` : `Level ${after.n}`}, <b>${after.title}</b>, is open.` : ''}</p>` : '';
   view.innerHTML = `<section class="panel done-card"><div class="eyebrow">${unit.boss ? 'Level ' + unit.level : unit.create ? 'Create' : 'Unit ' + unit.id} complete</div><div class="big">${big}</div><p>${body}</p>${pass}<div class="row">${nx ? `<button type="button" class="btn primary" data-act="next">${nx.boss ? 'Level ' + nx.level + ' boss' : 'Next: ' + nx.title}</button>` : ''}<button type="button" class="btn" data-act="home">Level ${nx ? nx.level : unit.level} path</button></div></section>`;
   const nb = view.querySelector('[data-act="next"]'); if (nb) nb.onclick = () => go('lesson', nx.id);
   view.querySelector('[data-act="home"]').onclick = () => go('home', nx ? nx.level : unit.level);
@@ -109,15 +109,18 @@ function showComplete(unit) {
 
 /* ---------- Daily Set ---------- */
 const DAILY = ['Tune-in', 'Review', 'New bite', 'Create', 'Ear spark', 'Today’s 1%'];
+/* intermediate order: the Ear Gym comes before the day's 8 bars */
+const DAILY_I = ['Tune-in', 'Review', 'New bite', 'Ear Gym', '8 Bars', 'Today’s 1%'];
 function renderDaily() {
   let s = 0;
-  view.innerHTML = `<section class="panel"><div class="lesson-head"><div><div class="eyebrow">Daily Set · about 10 minutes</div><h1>Today’s practice</h1></div><button type="button" class="btn ghost small" data-act="exit">← Home</button></div><div class="strip">${DAILY.map(d => `<div>${d}</div>`).join('')}</div><div class="stage"></div></section>`;
+  const inter = isIntermediate(), LABELS = inter ? DAILY_I : DAILY;
+  view.innerHTML = `<section class="panel"><div class="lesson-head"><div><div class="eyebrow">Daily Set · about 10 minutes</div><h1>Today’s practice</h1></div><button type="button" class="btn ghost small" data-act="exit">← Home</button></div><div class="strip">${LABELS.map(d => `<div>${d}</div>`).join('')}</div><div class="stage"></div></section>`;
   const stage = view.querySelector('.stage'), strip = view.querySelectorAll('.strip div');
   view.querySelector('[data-act="exit"]').onclick = () => go('home');
   const day = Store.day();
   function frame(title, sub) {
     strip.forEach((d, i) => { d.classList.toggle('on', i === s); d.classList.toggle('past', i < s); });
-    stage.innerHTML = `<div class="tag">${DAILY[s]} · ${s + 1} of 6</div><h2>${title}</h2>${sub ? `<p class="lead">${sub}</p>` : ''}<div class="task"></div><div class="stepnav"><button type="button" class="skip" data-act="skip">Skip</button><button type="button" class="btn primary" data-act="next" disabled>Next</button></div>`;
+    stage.innerHTML = `<div class="tag">${LABELS[s]} · ${s + 1} of ${LABELS.length}</div><h2>${title}</h2>${sub ? `<p class="lead">${sub}</p>` : ''}<div class="task"></div><div class="stepnav"><button type="button" class="skip" data-act="skip">Skip</button><button type="button" class="btn primary" data-act="next" disabled>Next</button></div>`;
     const next = stage.querySelector('[data-act="next"]');
     const advance = () => { runCleanup(); s++; steps[s](); };
     next.onclick = advance; stage.querySelector('[data-act="skip"]').onclick = advance;
@@ -125,6 +128,7 @@ function renderDaily() {
   }
   const steps = [
     function tune() {
+      if (inter) { const f = frame('Tune in over a drone', 'The drone sets the key. Sing or play the three degrees it asks for, in any octave.'); cleanup = Tasks.droneTune(f.body, {}, () => f.ready()); return; }
       const f = frame('Match three notes', 'Listen, then play or sing the same note. Any octave counts.');
       const zone = Store.data.range;
       const lo = zone ? Math.max(48, zone.zl) : 55, hi = zone ? Math.min(72, zone.zh) : 67;
@@ -177,16 +181,17 @@ function renderDaily() {
     },
     function create() {
       const lv = levelByN(currentLevel()), cr = lv.create || levelByN(1).create;
-      const f = frame('Make something', 'Two minutes, one small constraint. Everything you save goes in your sketchbook.');
+      const f = inter ? frame('8 bars a day', 'One constraint, eight bars, a few minutes. Quantity first: quality follows. It goes in your sketchbook.') : frame('Make something', 'Two minutes, one small constraint. Everything you save goes in your sketchbook.');
       cleanup = Tasks[cr.task || 'motif'](f.body, Object.assign({ prompt: rand(cr.prompts), level: lv.n }, cr.params), () => f.ready());
     },
     function ear() {
+      if (inter) { const f = frame('Ear Gym', 'Five rounds of your weakest ear skill. It gets harder as you get better.'); cleanup = EarGym.run(f.body, (ok, total) => { day.earOk += ok; day.earN += total; Store.save(); f.ready(); }); return; }
       let n = currentLevel(); while (n > 1 && !(levelByN(n) && levelByN(n).ear)) n--;
       const e = levelByN(n).ear;
       const f = frame(e.title, e.sub);
       cleanup = e.run(f.body, (ok, total) => { day.earOk += ok; day.earN += total; Store.save(); f.ready(); });
     },
-    function onePercent() {
+    function onePercentStep() {
       day.done = true; bumpStreak(); Store.save(); paintStreak();
       const f = frame('Today’s 1%', '');
       const msg = onePercentMessage();
@@ -196,6 +201,10 @@ function renderDaily() {
       strip.forEach(d => { d.classList.remove('on'); d.classList.add('past'); });
     }
   ];
+  /* steps by name, then in the section's order */
+  const byName = { tune: steps[0], review: steps[1], bite: steps[2], create: steps[3], ear: steps[4], done: steps[5] };
+  steps.length = 0;
+  (inter ? ['tune', 'review', 'bite', 'ear', 'create', 'done'] : ['tune', 'review', 'bite', 'create', 'ear', 'done']).forEach(k => steps.push(byName[k]));
   steps[0]();
 }
 function onePercentMessage() {
@@ -213,6 +222,8 @@ function onePercentMessage() {
     if (e0 != null && e1 != null && e1 > e0) return { big: `${Math.round(e0 * 100)}% → ${Math.round(e1 * 100)}%`, small: 'Ear spark accuracy, last session vs today.' };
     const u0 = acc(prev.tuneOk, prev.tuneN), u1 = acc(today.tuneOk, today.tuneN);
     if (u0 != null && u1 != null && u1 > u0) return { big: `${Math.round(u0 * 100)}% → ${Math.round(u1 * 100)}%`, small: 'Notes matched on the first try, last session vs today.' };
+    const bars = barsThisWeek();
+    if (bars) return { big: `${bars} bar${bars > 1 ? 's' : ''} this week`, small: 'Bars of music you wrote in the last 7 days. Quantity first; quality follows.' };
     return { big: 'Steady', small: 'No number beat last time today, and that is normal. Spaced practice dips before it climbs.' };
   }
   const s1 = speed(today);

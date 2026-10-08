@@ -11,7 +11,10 @@ const CARD_DEFS = {};
 /* how a review card is shown, by card.type: (el, card, fin(ok)) → cleanup */
 const CARD_TYPES = {};
 
+/* levels 1–5 are the beginner section, 6–10 the intermediate section */
+const SECTIONS = ['Beginner', 'Intermediate'];
 function addLevel(lv) {
+  lv.section = lv.section || (lv.n <= 5 ? 'Beginner' : 'Intermediate');
   lv.units.forEach(u => { u.level = lv.n; });
   LEVELS.push(lv);
   LEVELS.sort((a, b) => a.n - b.n);

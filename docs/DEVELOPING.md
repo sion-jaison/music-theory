@@ -16,7 +16,13 @@ src/app/*.js           the app, concatenated in name order inside one strict-mod
   05-registry.js       LEVELS, ARC, CARD_DEFS, CARD_TYPES, addLevel()
   10-tasks.js          Level 1 tasks (climb, octave, findAll, playName, step, pulse, clapback, echo, motif, choice, card …)
   11-components.js     shared pieces: Staff, Circle, ChordIn, chordHit, chromaMeter, Tasks.quiz/playSeq/playChords
+  12-notation.js       rhythm and pitch notation (Score), quantizing taps and played notes, MelodyCapture and Tasks.capture,
+                       rhythm tasks for any meter (rhythmTap, rhythmDictation, meterFeel)
+  13-intermediate.js   intermediate pieces: Drone and key context, Tasks.degreeEar, the adaptive EarGym (addEarSkill),
+                       Motive tools and Tasks.variationLab, contour, and the project steps (projectSetup, projectDraft,
+                       review, compare)
   20-level1.js … 60-level5.js   one file per level: its tasks, units, review cards, Daily Set ear and create config
+  62-level6-rhythm.js, 63-level6.js   Level 6 (units 6.1–6.4 in the first file, the rest and addLevel in the second)
   80-progress.js       units done, level unlocks, review scheduling, sketches, streak, personal bests
   85-lesson.js         lesson runner
   90-views.js          home, lesson, Daily Set, sketchbook, setup
@@ -68,7 +74,9 @@ addLevel({
 });
 ```
 
-A unit: `{ id: '2.3', title, blurb, steps: [...] }`, plus `create: true` for a Create stop (id like `2.P`) or `boss: true` for the boss (id **must** be `N.B`; passing it opens level N+1). Boss steps cannot be skipped, so every boss task must be completable with the on-screen keys and computer keys alone (no mic required).
+A unit: `{ id: '2.3', title, blurb, steps: [...] }`, plus `create: true` for a Create stop (id like `2.P`) or `boss: true` for the boss (id **must** be `N.B`; passing it opens level N+1). Intermediate units end in a workshop step and set `workshop: true`.
+
+Levels 1–5 form the **Beginner** section and 6–10 the **Intermediate** section (`section` on the level, set automatically). Home groups the tabs by section; passing a section's last boss shows "<Section> section complete". When the learner's current level is intermediate, the Daily Set becomes Tune-in over a drone → Review → New bite → **Ear Gym** → **8 Bars** → Today's 1%. The Ear Gym runs the learner's weakest unlocked skill: register skills with `addEarSkill({ id, label, unit, run(body, finish(ok, total), difficulty) })`; difficulty (1–5) rises after 80% and falls below 50%. A level's `create` may name a `task` (e.g. `'capture'`) and give `params` as a getter so each day gets a fresh constraint. Boss steps cannot be skipped, so every boss task must be completable with the on-screen keys and computer keys alone (no mic required).
 
 A step is a reading card or a task, tagged with one of `ARC`: `Hear`, `Echo`, `Explore`, `Name`, `Create`.
 

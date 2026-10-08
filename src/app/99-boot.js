@@ -16,5 +16,6 @@ function boot() {
   go('home');
 }
 /* a handle for tests and the browser console */
-window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keyboard, LEVELS, CARD_DEFS, CARD_TYPES, go, chordTarget, chordHit };
+window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keyboard, LEVELS, CARD_DEFS, CARD_TYPES, go, chordTarget, chordHit,
+  Drone, Motive, MOTIVE_TOOLS, EarGym, EAR_SKILLS, spellIn, degreeOf, contourShape, motiveEvents, saveSketch };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
