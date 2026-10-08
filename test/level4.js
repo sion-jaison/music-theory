@@ -296,7 +296,9 @@ const H = require('./helpers');
   t.check(graded === true, 'l4Tonic card: right tonic grades true');
   cl(); host2.remove();
 
-  // Daily Set: Level 4 review card, minor-key create prompt, major/minor ear spark
+  // Daily Set: Level 4 review card, minor-key create prompt, major/minor ear spark.
+  // Passing the boss made Level 5 current (when it exists), so set the boss aside while the Daily Set runs as a Level 4 learner's.
+  const bossRecord = D().units['4.B']; delete D().units['4.B'];
   t.home(); await wait(30);
   t.click('[data-act="daily"]'); await wait(300);
   t.click('.stage [data-act="skip"]'); await wait(80);
@@ -314,6 +316,7 @@ const H = require('./helpers');
   t.check(nextOn() && M.Store.day().earN === earN + 5 && M.Store.day().earOk >= 5, 'Daily Set ear spark: 5 rounds scored');
   t.next(); await wait(40);
   t.check(/1%/.test(t.$('.stage .tag').textContent), 'Daily Set reaches Today’s 1%');
+  D().units['4.B'] = bossRecord;
 
   // clean-up: no listeners or chord input left behind
   t.home(); await wait(30);
