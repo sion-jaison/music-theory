@@ -241,4 +241,4 @@ Compared with common beginner theory syllabi (RCM Preparatory through Level 2 ru
 - The Toolbox covers the Circle of Fifths, scales, chords, progressions and memory hooks.
 - Automated tests walk every unit of every level and finish with no runtime errors.
 
-When this is done and checked, the next step is to plan the intermediate section.
+When this is done and checked, the next step is the intermediate section, planned in [`PLAN-INTERMEDIATE.md`](PLAN-INTERMEDIATE.md).

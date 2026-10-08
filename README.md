@@ -12,6 +12,8 @@ The beginner section is five levels, planned unit by unit in [`docs/PLAN.md`](do
 | 4 | The Clock | Key signatures, the Circle of Fifths, relative and parallel keys, natural, harmonic and melodic minor, chords in minor |
 | 5 | Make It Move | Chord functions, the four-chord loop, 12-bar blues, ii–V–I, cadences, transposing, melody over chords, dynamics, form, your own 8-bar piece |
 
+The intermediate section, Levels 6–10 (Groove & Line, Colours, Voices, Borrow & Travel, Write the Song), is planned in [`docs/PLAN-INTERMEDIATE.md`](docs/PLAN-INTERMEDIATE.md): composing, ear training and arranging built on the standard theory texts.
+
 Every unit follows the arc **Hear → Echo → Explore → Name → Create**. Each level ends with a boss challenge that opens the next level (and lets you test out of a level you already know).
 
 Every day there is a 10-minute **Daily Set**: tune in, review what is due, learn one new thing, make something, train your ear, and see **Today's 1%**, one number that got better. Finishing a unit adds review cards that come back after 1, 3, 7, 14 and 30 days. The **Sketchbook** keeps one musical idea growing from a Level 1 motif to a Level 5 eight-bar piece. The **Toolbox** has a "what am I playing?" listener (notes, chords and the likely key), a Circle of Fifths explorer, scale, chord and progression finders, and every memory hook in the course.
