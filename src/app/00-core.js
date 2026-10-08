@@ -117,6 +117,13 @@ const Sound = {
     o.connect(g); g.connect(this.master); o.start(t0); o.stop(t0 + 0.14);
     this.busyUntil = Math.max(this.busyUntil, t0 + 0.15);
   },
+  /* Run fn with every sound it makes sent to `dest` instead of the master (a loop's own gain node, so stopping it
+     silences notes already scheduled). gate: false leaves the mic listening while those sounds play. */
+  routed(dest, fn, opts) {
+    const m = this.master, keep = this.busyUntil;
+    this.master = dest;
+    try { fn(); } finally { this.master = m; if (opts && opts.gate === false) this.busyUntil = keep; }
+  },
   seq(notes, lead) {
     const ctx = this.ensure(); if (!ctx) return 0;
     const t0 = ctx.currentTime + (lead == null ? 0.08 : lead);
@@ -141,7 +148,8 @@ const Mic = {
       this.an2.fftSize = 16384; this.an2.smoothingTimeConstant = 0.5;
       this.src.connect(this.an2);
       this.db = new Float32Array(this.an2.frequencyBinCount);
-      this.ctrack = createChordTracker({});
+      /* chord analysis runs every other frame (~30 fps): 4 frames on ≈ 130 ms, 6 frames off ≈ 200 ms */
+      this.ctrack = createChordTracker({ need: 4, release: 6 });
     } else if (!need && this.an2) {
       try { this.src.disconnect(this.an2); } catch (e) { /* already gone */ }
       this.an2 = null; this.db = null; this.ctrack = null;
@@ -209,12 +217,30 @@ const Mic = {
     if (!this.an2) return;
     this.an2.getFloatFrequencyData(this.db);
     const a = gate ? analyzeSpectrum(this.db, Sound.ctx.sampleRate, this.an2.fftSize) : null;
-    const m = a ? matchChord(a.chroma, { bassPc: a.bassPc }) : null;
+    const m = a ? matchChord(a.chroma, { bassPc: a.bassPc, played: a.played }) : null;
     Bus.emit('chroma', a);
+    /* The bass of one frame can flicker during the attack, so vote over the frames that matched this same chord
+       (later frames weigh more; a tie goes to the root), and correct the event once the bass has settled. */
+    const key = m ? m.root + m.quality : null;
+    if (key !== this.bassKey) { this.bassKey = key; this.bassHist = []; }
+    if (m && a.bassPc >= 0) this.bassHist.push(a.bassPc);
     const o = this.ctrack.update(m);
-    if (o.off) Bus.emit('chordoff', { source: 'mic' });
-    /* report the chord's own notes; the raw active pitch classes include overtones (a C chord's B and D) */
-    if (o.on) Bus.emit('chord', chordEvent('mic', Theory.chordPcs(Theory.rootName(o.on.root, o.on.quality), o.on.quality).sort((x, y) => x - y), a && a.bassPc >= 0 ? a.bassPc : o.on.root, o.on.root, o.on.quality));
+    if (o.off) { Bus.emit('chordoff', { source: 'mic' }); this.held = null; }
+    if (o.on) {
+      /* report the chord's own notes; the raw active pitch classes include overtones (a C chord's B and D) */
+      const pcs = Theory.chordPcs(Theory.rootName(o.on.root, o.on.quality), o.on.quality).sort((x, y) => x - y);
+      this.held = { on: o.on, pcs, bass: this.voteBass(pcs, o.on.root), frames: 0 };
+      Bus.emit('chord', chordEvent('mic', pcs, this.held.bass, o.on.root, o.on.quality));
+    } else if (this.held && ++this.held.frames === 10 && this.bassKey === this.held.on.root + this.held.on.quality) {
+      const b = this.voteBass(this.held.pcs, this.held.on.root);
+      if (b !== this.held.bass) { this.held.bass = b; Bus.emit('chord', chordEvent('mic', this.held.pcs, b, this.held.on.root, this.held.on.quality)); }
+    }
+  },
+  voteBass(pcs, root) {
+    const votes = {};
+    this.bassHist.slice(-12).forEach((b, k) => { if (pcs.indexOf(b) >= 0) votes[b] = (votes[b] || 0) + 1 + k; });
+    const best = Object.keys(votes).sort((x, y) => votes[y] - votes[x] || (+y === root) - (+x === root))[0];
+    return best == null ? root : +best;
   }
 };
 

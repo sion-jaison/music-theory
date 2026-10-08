@@ -94,6 +94,12 @@ function listen(db, sr, mo) {
   if (!a) return { a: null, m: null };
   return { a: a, m: P.matchChord(a.chroma, Object.assign({ bassPc: a.bassPc, played: a.played }, mo || {})) };
 }
+const seen = [];   // every chord frame, re-scored at the end without the `played` hint
+function hear(notes, kind, sr, root, q) {
+  const db = frame(notes, kind, sr);
+  seen.push({ db, sr, root, q });
+  return listen(db, sr);
+}
 const chordName = m => m ? NAMES[m.root] + (m.quality === 'maj' ? '' : m.quality === 'min' ? 'm' : m.quality) : 'null';
 // aug and sus2/sus4 are symmetric: any spelling of the same pitch-class set is right.
 function same(m, root, q) {
@@ -122,7 +128,7 @@ function triads(sr) {
       };
       for (const v in voicings) {
         for (const kind of KINDS) {
-          const { m } = listen(frame(voicings[v], kind, sr), sr);
+          const { m } = hear(voicings[v], kind, sr, r, q);
           total++;
           if (same(m, r, q)) { ok++; scores.push(m.score); } else miss.push(`${NAMES[r]}${q === 'min' ? 'm' : ''} ${v} ${kind} -> ${chordName(m)}`);
         }
@@ -143,7 +149,7 @@ function qualities(sr, list) {
     const miss = [];
     for (let r = 0; r < 12; r++) {
       for (const kind of KINDS) {
-        const { m } = listen(frame(IV[q].map(iv => 48 + r + iv), kind, sr), sr);
+        const { m } = hear(IV[q].map(iv => 48 + r + iv), kind, sr, r, q);
         total++;
         if (same(m, r, q)) { ok++; scores.push(m.score); } else miss.push(`${NAMES[r]}${q} ${kind} -> ${chordName(m)}`);
       }
@@ -169,7 +175,7 @@ qualities(44100, ['7', 'maj7', 'm7']);
     };
     for (const v in inv) {
       for (const kind of KINDS) {
-        const { a, m } = listen(frame(inv[v], kind, 48000), 48000);
+        const { a, m } = hear(inv[v], kind, 48000, r, 'maj');
         const bass = inv[v][0] % 12;
         const good = same(m, r, 'maj'), gb = a && a.bassPc === bass;
         total++;
@@ -213,20 +219,20 @@ qualities(44100, ['7', 'maj7', 'm7']);
 // 6. tracker: one on for a steady chord, a one-frame glitch is ignored, silence turns it off
 {
   const C = { root: 0, quality: 'maj', score: 0.92, margin: 0.1, pcs: [0, 4, 7] };
-  const Cweak = Object.assign({}, C, { score: 0.7 });   // under minScore, over keepScore
+  const Cweak = Object.assign({}, C, { score: 0.75 });   // under minScore 0.8, over keepScore 0.7
   const G = { root: 7, quality: 'maj', score: 0.9, margin: 0.1, pcs: [2, 7, 11] };
   const tr = P.createChordTracker({});
-  let ons = 0, offs = 0, onAt = -1;
+  let ons = 0, offs = 0, onAt = -1, offAt = -1;
   const stream = [];
-  for (let i = 0; i < 40; i++) stream.push(i === 20 ? G : (i > 10 && i % 5 === 3 ? Cweak : C));
+  for (let i = 0; i < 40; i++) stream.push(i === 20 ? G : i >= 25 ? Cweak : C);   // glitch, then 15 weaker frames
   for (let i = 0; i < 20; i++) stream.push(null);
   stream.forEach((m, i) => {
     const o = tr.update(m);
     if (o.on) { ons++; if (onAt < 0) onAt = i; }
-    if (o.off) offs++;
+    if (o.off) { offs++; if (offAt < 0) offAt = i; }
   });
-  check(ons === 1 && onAt === 5, `tracker: steady C gives one on (frame ${onAt}), glitch to G ignored (${ons} on)`);
-  check(offs === 1, `tracker: silence afterwards gives off (${offs} off)`);
+  check(ons === 1 && onAt === 5, `tracker: steady C gives one on (frame ${onAt}), one-frame glitch to G ignored (${ons} on)`);
+  check(offs === 1 && offAt === 49, `tracker: weaker C frames keep it (hysteresis), silence turns it off (${offs} off, frame ${offAt})`);
   const tr2 = P.createChordTracker({});
   let changes = [];
   for (let i = 0; i < 30; i++) { const o = tr2.update(i < 15 ? C : G); if (o.on) changes.push(chordName(o.on) + (o.off ? ' (C off)' : '')); }
@@ -235,14 +241,26 @@ qualities(44100, ['7', 'maj7', 'm7']);
 
 // 7. cost per frame
 {
-  const frames = [];
-  for (let r = 0; r < 12; r++) frames.push(frame([48 + r, 52 + r, 55 + r, 58 + r], KINDS[r % 3], 48000));
+  const frames = seen.slice(0, 48).map(f => f.db);
+  const loud = new Float32Array(N);
+  for (let i = 0; i < N; i++) loud[i] = 0.1 * gauss();
+  frames.push(analyser(loud));   // noise: the most peaks, the worst case
   for (let i = 0; i < 4; i++) frames.forEach(db => listen(db, 48000));   // warm up
   const t0 = process.hrtime.bigint();
   const reps = 50;
   for (let i = 0; i < reps; i++) frames.forEach(db => listen(db, 48000));
   const ms = Number(process.hrtime.bigint() - t0) / 1e6 / (reps * frames.length);
   check(ms < 2, `analyzeSpectrum + matchChord: ${ms.toFixed(3)} ms per frame (budget 2 ms)`);
+}
+
+// The app may call matchChord with bassPc only; report how that path does.
+{
+  let ok = 0;
+  seen.forEach(f => {
+    const a = P.analyzeSpectrum(f.db, f.sr, N);
+    if (same(a && P.matchChord(a.chroma, { bassPc: a.bassPc }), f.root, f.q)) ok++;
+  });
+  console.log(`INFO  without opts.played: ${ok}/${seen.length} = ${(100 * ok / seen.length).toFixed(1)}% of the chord frames above`);
 }
 
 scores.sort((a, b) => a - b);

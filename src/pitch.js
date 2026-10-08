@@ -3,6 +3,7 @@
    Pitch: McLeod Pitch Method (McLeod & Wyvill, "A Smarter Way to Find
    Pitch", 2005). Normalized square difference function (NSDF), key
    maxima, k-threshold, parabolic interpolation.
+   Chords: spectral-peak chroma and harmonic templates (further down).
    ------------------------------------------------------------------ */
 
 function freqToMidi(f) { return 69 + 12 * Math.log2(f / 440); }
@@ -157,6 +158,7 @@ const CHORD_QUALITIES = [
 const CHORD_HARM_PC = [0, 0, 7, 0, 4, 7];   // round(12*log2(h)) mod 12, h = 1..6
 let chordPkHz = new Float64Array(512), chordPkDb = new Float64Array(512);
 let chordPkLvl = new Float64Array(512), chordPkSlope = new Float64Array(512), chordPkRef = new Uint8Array(512);
+const chordAdj = new Float64Array(CHORD_QUALITIES.length * 12), chordRaw = new Float64Array(CHORD_QUALITIES.length * 12);
 
 function chordMask(root, quality) {
   for (let q = 0; q < CHORD_QUALITIES.length; q++) {
@@ -166,6 +168,17 @@ function chordMask(root, quality) {
     return m;
   }
   return 0;
+}
+
+/* Index of the peak within 30 cents of f and at least minDb loud, or -1. */
+function chordPeakNear(pkHz, pkDb, n, minDb, f) {
+  for (let j = 0; j < n; j++) {
+    if (pkDb[j] < minDb) continue;
+    const c = 1200 * Math.log2(pkHz[j] / f);
+    if (c > 30) break;
+    if (c > -30) return j;
+  }
+  return -1;
 }
 
 /* One analyser frame (dB per bin) -> { chroma, bassPc, energy, peaks, played }
@@ -278,25 +291,16 @@ function analyzeSpectrum(db, sampleRate, fftSize, opts) {
   // 2nd harmonic). A peak that is the 3rd partial of real but weaker peaks
   // at f/3 and 2f/3 yields to f/3.
   const strong = top - bassDb, weak = top - 30;
-  function near(f) {
-    for (let j = 0; j < n; j++) {
-      if (pkDb[j] < weak) continue;
-      const c = 1200 * Math.log2(pkHz[j] / f);
-      if (c > 30) break;
-      if (c > -30) return j;
-    }
-    return -1;
-  }
   let bass = -1;
   for (let i = 0; i < n && bass < 0; i++) {
     if (pkDb[i] >= strong) bass = i;
-    else if (pkDb[i] >= weak) { const j = near(2 * pkHz[i]); if (j >= 0 && pkDb[j] >= strong) bass = i; }
+    else if (pkDb[i] >= weak) { const j = chordPeakNear(pkHz, pkDb, n, weak, 2 * pkHz[i]); if (j >= 0 && pkDb[j] >= strong) bass = i; }
   }
   let bassPc = -1;
   if (bass >= 0) {
     let f = pkHz[bass];
-    const j = near(f / 3);
-    if (j >= 0 && near(2 * f / 3) >= 0) f = pkHz[j];
+    const j = chordPeakNear(pkHz, pkDb, n, weak, f / 3);
+    if (j >= 0 && chordPeakNear(pkHz, pkDb, n, weak, 2 * f / 3) >= 0) f = pkHz[j];
     bassPc = ((Math.round(69 + 12 * Math.log2(f / 440)) % 12) + 12) % 12;
   }
   return { chroma: chroma, bassPc: bassPc, energy: energy, peaks: used, played: played };
@@ -314,7 +318,9 @@ function chordTemplates(decay) {
     for (let i = 0; i < 12; i++) nn += t[i] * t[i];
     nn = Math.sqrt(nn);
     for (let i = 0; i < 12; i++) t[i] /= nn;
-    return { name: q[0], ivs: q[1], t: t, mask: chordMask(0, q[0]) };
+    const masks = new Uint16Array(12);
+    for (let r = 0; r < 12; r++) masks[r] = chordMask(r, q[0]);
+    return { name: q[0], ivs: q[1], t: t, masks: masks };
   });
   chordTplDecay = decay;
   return chordTpl;
@@ -331,7 +337,7 @@ function matchChord(chroma, opts) {
   const minScore = opts.minScore != null ? opts.minScore : 0.6;
   const active = opts.active || 0.3;
   const toneMin = opts.toneMin || 0.3;
-  const need3 = opts.need3 || 0.7, need5 = opts.need5 || 0.5, need7 = opts.need7 || 0.4;
+  const need3 = opts.need3 || 0.7, need5 = opts.need5 || 0.55, need7 = opts.need7 || 0.4;
   const fifthMin = opts.fifthMin || 0.2;
   const minShare = opts.minShare != null ? opts.minShare : 0.6;
   const bassPc = opts.bassPc != null ? opts.bassPc : -1;
@@ -351,13 +357,11 @@ function matchChord(chroma, opts) {
   if (pcs.length < 3) return null;
   const nn = Math.sqrt(e2);
 
-  const n = tpl.length * 12;
-  const adj = new Float64Array(n), raw = new Float64Array(n), mask = new Uint16Array(n);
+  const n = tpl.length * 12, adj = chordAdj, raw = chordRaw;
   for (let q = 0; q < tpl.length; q++) {
-    const skip = qualities && qualities.indexOf(tpl[q].name) < 0, t = tpl[q].t, m = tpl[q].mask;
+    const skip = qualities && qualities.indexOf(tpl[q].name) < 0, t = tpl[q].t;
     for (let r = 0; r < 12; r++) {
       const k = q * 12 + r;
-      mask[k] = ((m << r) | (m >>> (12 - r))) & 4095;
       if (skip) { adj[k] = -Infinity; continue; }
       let dot = 0;
       for (let i = 0; i < 12; i++) dot += chroma[(i + r) % 12] * t[i];
@@ -394,8 +398,9 @@ function matchChord(chroma, opts) {
       if (v < need * max) ok = false;
     }
     if (!ok || share < minShare * e2) { adj[k] = -Infinity; continue; }
+    const mk = tpl[(k / 12) | 0].masks[r];
     let second = 0;
-    for (let i = 0; i < n; i++) if (mask[i] !== mask[k] && adj[i] > second) second = adj[i];
+    for (let i = 0; i < n; i++) if (adj[i] > second && tpl[(i / 12) | 0].masks[i % 12] !== mk) second = adj[i];
     return { root: r, quality: tpl[(k / 12) | 0].name, score: raw[k], margin: adj[k] - second, pcs: pcs };
   }
   return null;
@@ -409,7 +414,7 @@ function createChordTracker(opts) {
   opts = opts || {};
   const need = opts.need || 6;
   const release = opts.release || 10;
-  const minScore = opts.minScore != null ? opts.minScore : 0.75;
+  const minScore = opts.minScore != null ? opts.minScore : 0.8;
   const keepScore = opts.keepScore != null ? opts.keepScore : minScore - 0.1;
   let cand = 0, candCount = 0, held = null, heldKey = 0, miss = 0;
 
