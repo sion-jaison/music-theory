@@ -111,6 +111,7 @@ const check = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); 
 
   // Motif: record black keys, reject a white key, save
   click('[data-act="home"]'); await wait(20);
+  click('.level-tabs [data-level="1"]'); await wait(20);
   click('.unit[data-u="1.M"]'); await wait(30);
   next(); await wait(30);
   click('[data-act="rec"]'); key('w'); key('a'); key('e'); key('t'); await wait(30);

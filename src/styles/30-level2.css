@@ -1,0 +1,73 @@
+/* ---------- Level 2: staff sprint, asked notes, scale pictures, interval options, rhythm extras, phrase builder ---------- */
+
+/* every Level 2 task stacks its parts with even spacing; [hidden] wins over display in both builds */
+.l2-task, .l2-build, .l2-st { display: grid; gap: 12px; min-width: 0; }
+.l2-task [hidden] { display: none !important; }
+.l2-task .progress-dots { flex-wrap: wrap; }
+.l2-quiz .quiz-q { display: grid; gap: 12px; min-width: 0; }
+
+/* staff sprint and staff questions: one big note to read */
+.l2-sprint { display: grid; place-items: center; padding: 10px 8px; border-radius: 12px; background: var(--surface-2); min-height: 140px; }
+.l2-sprint .nstaff { width: min(100%, 300px); }
+.l2-sprint.grand .nstaff { width: min(100%, 250px); }
+.l2-sprint .nstaff .nlabel { font-size: 13px; font-weight: 700; }
+.l2-qstaff { display: grid; place-items: center; padding: 6px; border-radius: 10px; background: var(--surface-2); }
+.l2-qstaff .nstaff { width: min(100%, 280px); }
+
+/* "Play mi in G major" */
+.l2-ask { display: grid; gap: 4px; }
+.l2-ask .q { font-family: var(--f-display); font-weight: 800; font-size: clamp(26px, 6vw, 36px); line-height: 1.15; letter-spacing: -0.01em; }
+.l2-ask .q b { color: var(--accent); }
+.l2-ask .sub { color: var(--muted); }
+
+/* choices with a second line (song anchors, sketches) */
+.l2-opt { display: grid; gap: 1px; text-align: left; line-height: 1.25; }
+.l2-opt small { font-size: 13px; font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
+.choice.right .l2-opt small, .choice.wrong .l2-opt small, .choice[aria-pressed="true"] .l2-opt small { color: inherit; }
+
+/* scale recipe as W/H chips, and C major with its gaps */
+.l2-recipe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.l2-recipe span { font-family: var(--f-mono); font-weight: 700; font-size: 13px; padding: 4px 9px; border-radius: 8px; background: var(--surface-2); color: var(--muted); }
+.l2-recipe span.h { background: var(--accent-soft); color: var(--accent); }
+.l2-recipe span.lab { background: none; padding-left: 0; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; font-size: 12px; }
+.l2-steps { display: flex; align-items: flex-start; width: 100%; max-width: 560px; margin-top: 6px; }
+.l2-steps .nt { flex: 0 0 auto; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; font-family: var(--f-mono); font-weight: 700; font-size: 14px; background: var(--accent-soft); color: var(--accent); }
+.l2-steps .nt.b { background: var(--glow-soft); color: var(--ink); }
+.l2-steps .gp { flex: 2 1 0; min-width: 8px; display: grid; justify-items: center; gap: 3px; padding-top: 14px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.l2-steps .gp::before { content: ""; display: block; width: 100%; border-top: 2px solid var(--line); }
+.l2-steps .gp.h { flex-grow: 1; color: var(--accent); font-weight: 700; }
+.l2-steps .gp.h::before { border-color: var(--accent); }
+.l2-steps .gp.join::before { border-top-style: dashed; border-color: var(--glow); }
+@media (max-width: 480px) {
+  .l2-steps .nt { width: 26px; height: 26px; font-size: 13px; border-radius: 7px; }
+  .l2-steps .gp { padding-top: 12px; font-size: 11px; }
+}
+.l2-halves { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.l2-reveal { display: grid; gap: 8px; }
+.l2-art2 { display: grid; gap: 8px; margin-top: 6px; }
+
+/* interval table */
+.l2-itbl td { vertical-align: middle; }
+.l2-itbl td:first-child { width: 52px; }
+.l2-itbl small { display: block; font-size: 13px; color: var(--muted); }
+.l2-itbl .btn.small { min-width: 40px; padding: 6px 10px; }
+.l2-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* rhythm notation extras (ties, flags, rests, counts) */
+.notation .l2stroke { fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.notation .l2fill { fill: var(--ink); }
+.notation .l2tie { fill: none; stroke: var(--ink); stroke-width: 1.8; }
+.notation .l2cnt { font-family: var(--f-mono); font-size: 12px; fill: var(--muted); }
+.notation .l2cnt.beat { fill: var(--ink); font-weight: 700; }
+.art .notation + .notation { margin-top: 8px; }
+.l2-rhead { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* phrase builder */
+.l2-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.l2-pick .choice { max-width: 100%; }
+.l2-grow { display: grid; gap: 12px; }
+.l2-from { color: var(--muted); max-width: 62ch; }
+.notes-strip .n.op { background: var(--glow-soft); color: var(--ink); }
+.l2-end { font-weight: 700; min-height: 1.5em; }
+.l2-end.good { color: var(--good); }
+.l2-end.info { color: var(--muted); }

@@ -305,7 +305,7 @@ Tasks.playSeq = (el, p, done) => {
   let i = 0, misses = 0, finished = false;
   const label = (n, k) => show === 'degrees' ? String(k % 7 + 1) : show === 'solfege' ? Theory.SOLFEGE[k % 7] : Theory.stripOct(n);
   const chip = (n, k) => `<span class="n${show === 'hidden' ? ' hid' : ''}" data-k="${k}">${show === 'hidden' ? '?' : label(n, k)}</span>`;
-  const stepOf = k => k > 0 ? Theory.stepName(Theory.midi(notes[k]) - Theory.midi(notes[k - 1])) : '';
+  const stepOf = k => k > 0 ? Theory.stepName(Math.abs(Theory.midi(notes[k]) - Theory.midi(notes[k - 1]))) : '';
   el.innerHTML = `${p.prompt ? `<p class="prompt">${p.prompt}</p>` : ''}${p.art ? `<div class="art">${p.art}</div>` : ''}<div class="notes-strip seq">${notes.map((n, k) => (p.steps && k ? `<span class="stp" data-s="${k}"></span>` : '') + chip(n, k)).join('')}</div><p class="fb info" aria-live="polite">${p.start || ''}</p>`;
   const f = el.querySelector('.fb');
   const chips = [...el.querySelectorAll('.notes-strip .n')];
@@ -327,7 +327,7 @@ Tasks.playSeq = (el, p, done) => {
       /* repeating the last right note is not a mistake */
     } else {
       misses++;
-      fb(f, 'bad', `That is ${noteName(d.midi)}. ${p.hint ? p.hint(i, notes[i]) : (p.steps && i > 0 ? `Next is a ${Theory.stepName(Theory.midi(notes[i]) - Theory.midi(notes[i - 1])) === 'H' ? 'half' : 'whole'} step up from ${Theory.stripOct(notes[i - 1])}.` : 'Try again.')}`);
+      fb(f, 'bad', `That is ${noteName(d.midi)}. ${p.hint ? p.hint(i, notes[i]) : (p.steps && i > 0 ? `Next is a ${stepOf(i) === 'H' ? 'half' : 'whole'} step ${Theory.midi(notes[i]) > Theory.midi(notes[i - 1]) ? 'up' : 'down'} from ${Theory.stripOct(notes[i - 1])}.` : 'Try again.')}`);
     }
   });
   return () => { off(); Keyboard.clearMarks(); };
