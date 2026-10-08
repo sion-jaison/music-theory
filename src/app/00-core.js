@@ -213,7 +213,8 @@ const Mic = {
     Bus.emit('chroma', a);
     const o = this.ctrack.update(m);
     if (o.off) Bus.emit('chordoff', { source: 'mic' });
-    if (o.on) Bus.emit('chord', chordEvent('mic', o.on.pcs, a && a.bassPc >= 0 ? a.bassPc : o.on.root, o.on.root, o.on.quality));
+    /* report the chord's own notes; the raw active pitch classes include overtones (a C chord's B and D) */
+    if (o.on) Bus.emit('chord', chordEvent('mic', Theory.chordPcs(Theory.rootName(o.on.root, o.on.quality), o.on.quality).sort((x, y) => x - y), a && a.bassPc >= 0 ? a.bassPc : o.on.root, o.on.root, o.on.quality));
   }
 };
 
