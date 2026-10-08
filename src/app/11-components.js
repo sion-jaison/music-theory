@@ -6,6 +6,7 @@
 
 /* ---------- sound helpers ---------- */
 Sound.chord = function (midis, when, dur, vel) {
+  if (!this.ensure()) return 0;
   const t0 = when == null ? this.now() + 0.05 : when;
   midis.forEach((m, i) => this.tone(m, t0 + i * 0.015, dur || 1.2, vel || 0.55));
   return t0 + (dur || 1.2);
@@ -375,6 +376,9 @@ Tasks.playChords = (el, p, done) => {
     if (finished || i >= targets.length) return;
     heard.textContent = (ev.source === 'mic' ? 'Mic hears: ' : 'You played: ') + chordWords(ev);
     if (chordHit(ev, targets[i])) { ChordIn.clear(); result(true, ev); }
+    else if (ev.pcs.length < targets[i].pcs.length && ev.pcs.every(pc => targets[i].pcs.indexOf(pc) >= 0)) fb(f, 'info', 'Keep going: those notes are part of it.');
+    /* all the right notes plus one more (often the last chord still ringing): a nudge, not a miss */
+    else if (ev.pcs.length === targets[i].pcs.length + 1 && targets[i].pcs.every(pc => ev.pcs.indexOf(pc) >= 0)) fb(f, 'info', `Close: I also hear ${Theory.pcName(ev.pcs.find(pc => targets[i].pcs.indexOf(pc) < 0))}. Let the last chord fade, then play it again.`);
     else if (ev.q) { misses++; fb(f, 'bad', `That is ${Theory.pretty(ev.sym)}, not ${Theory.pretty(targets[i].sym)}.${targets[i].bassPc != null && sameSet(ev.pcs, targets[i].pcs) ? ' Right notes; put ' + Theory.pcName(targets[i].bassPc) + ' at the bottom.' : ''}`); }
   });
   show();

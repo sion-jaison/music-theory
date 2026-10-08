@@ -178,7 +178,7 @@ function renderDaily() {
     function create() {
       const lv = levelByN(currentLevel()), cr = lv.create || levelByN(1).create;
       const f = frame('Make something', 'Two minutes, one small constraint. Everything you save goes in your sketchbook.');
-      cleanup = Tasks.motif(f.body, Object.assign({ prompt: rand(cr.prompts), level: lv.n }, cr.params), () => f.ready());
+      cleanup = Tasks[cr.task || 'motif'](f.body, Object.assign({ prompt: rand(cr.prompts), level: lv.n }, cr.params), () => f.ready());
     },
     function ear() {
       let n = currentLevel(); while (n > 1 && !(levelByN(n) && levelByN(n).ear)) n--;
