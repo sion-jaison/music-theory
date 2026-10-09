@@ -239,6 +239,18 @@ const H = require('./helpers');
   t.check(pw.voices[0].every(x => x === null) && pw.voices[1].join(' ') === cf1.join(' '), 'PartWriter: Clear all clears only the written voice');
   pw.destroy();
 
+  /* sing (here: play) along: the cantus plays after a count-in; each column takes the note that arrives in its time */
+  const pwS = M.PartWriter.mount(host, { voices: 2, given: { cantus: ['C4', 'D4', 'E4', 'D4', 'C4'] }, key: 'C', secPerCol: 0.5 });
+  const clock = () => w.performance.now() / 1000;
+  const t0 = clock() + 0.2 + 4 * 0.5 * 0.5;
+  t.click(host.querySelector('[data-a="sing"]'));
+  t.check(host.querySelector('[data-a="sing"]').disabled && /Count-in/.test(host.querySelector('.pw-msg .fb').textContent), 'PartWriter: Sing along counts in');
+  for (const [c, n] of [[0, 'C5'], [1, 'B4'], [2, 'G4'], [3, 'B4'], [4, 'C5']]) { const ms = (t0 + c * 0.5 + 0.1 - clock()) * 1000; if (ms > 0) await wait(ms); await play(n); }
+  await wait(Math.max(0, (t0 + 2.5 + 0.4 - clock()) * 1000) + 300);
+  t.check(pwS.voices[0].join(' ') === 'C5 B4 G4 B4 C5' && pwS.problems.length === 0 && /5 notes written/.test(host.querySelector('.pw-msg .fb').textContent),
+    `PartWriter: notes played in time along with the cantus fill the counterpoint (${pwS.voices[0].join(' ')})`);
+  pwS.destroy();
+
   /* species 2: a cantus given one note per bar, the final whole note */
   const pw2 = M.PartWriter.mount(host, { voices: 2, style: 'species2', given: { cantus: ['C4', 'D4', 'F4', 'E4', 'D4', 'C4'] }, key: 'C' });
   t.check(pw2.cols === 12 && pw2.voices[1][1] === null && pw2.voices[1][2] === 'D4' && pw2.progress.need === 11, `PartWriter species 2: 12 columns, the cantus spread over its bars, 11 cells to write (${pw2.progress.need})`);

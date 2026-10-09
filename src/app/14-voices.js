@@ -781,7 +781,7 @@ const VoiceLead = {
 /* =================================================================
    VoiceView: several voices in notation
    VoiceView.svg({ voices, staves: 'grand' | 'single' | 'two', clef (for 'single'), clefs ([top, bottom] for 'two'),
-     key, mode or keySig, labels (under the bass: Roman numerals with figures, e.g. 'V65', 'I64', 'V7/V'),
+     key and mode ('E♭', 'minor'; or key 'E♭ minor') or keySig, labels (under the bass: Roman numerals with figures, e.g. 'V65', 'I64', 'V7/V'),
      marks: [{ col, voice, kind: 'error' | 'warn' | 'ok' | 'found' | 'hint' }],
      lines: [{ from: { col, voice }, to: { col, voice }, kind }] (e.g. two voices moving in parallel 5ths),
      sel: { col, voice }, durations ('w' | 'h' | 'q', one per column, or one array per voice), style (sets the defaults:
@@ -818,7 +818,9 @@ function vvLabel(x, y, text) {
 function vvSvg(o) {
   o = o || {};
   const raw = o.voices || [], n = raw.length, cols = raw.reduce((x, v) => Math.max(x, (v || []).length), 0);
-  const key = Theory.stripOct(o.key || 'C'), mode = o.mode === 'minor' ? 'minor' : 'major';
+  /* key: 'E♭' with mode, or 'E♭ minor' as sketches store it */
+  const km = /^(\S+)\s+(major|minor)$/.exec(String(o.key || ''));
+  const key = Theory.stripOct(km ? km[1] : o.key || 'C'), mode = km ? km[2] : o.mode === 'minor' ? 'minor' : 'major';
   const ks = o.keySig != null ? o.keySig : o.key ? Theory.keySig(key, mode).n : 0, nAcc = Math.abs(ks);
   const style = o.style || (n >= 3 ? 'chorale' : 'free'), sp = /^species/.test(style) ? +style.slice(7) || 1 : 0;
   const N = raw.map(v => Array.from({ length: cols }, (_, c) => vlNote((v || [])[c], key, mode)));
@@ -1038,7 +1040,8 @@ const VoiceView = { svg: vvSvg, clefFor: vvClefFor };
            initial (voices to start from), names, staves, beats, secPerCol (playback, seconds per column), skip ([{ col, voice }]
            cells that stay empty; species 2 and 4 skip the cells a whole note or the opening rest covers), check (extra
            VoiceLead.check options), order ('column' for four voices, 'voice' for two: where the selection goes after a note),
-           mic (default true), sing (default true: a Sing along button when one voice is written against a given one),
+           mic (default true), sing (default true: a Sing along button when one voice is written against a given one: after
+           a count-in the given voice plays and each column takes the note sung, or played on the keys, in its time),
            onChange(voices, problems) }
    Select a cell by clicking it (or a voice button), then play a note: on-screen keys, computer keys A–K, MIDI, or the
    mic. The note keeps the octave you played. With the score focused: ←/→ column, ↑/↓ half step (an empty cell gets a
@@ -1218,41 +1221,49 @@ const PartWriter = {
       });
       return out.map(x => Object.assign({}, x, { d: +(x.d * 0.94).toFixed(3) }));
     }
+    /* light each column as it sounds, `lead` ms from now */
+    function lights(lead) {
+      for (let c = 0; c < cols; c++) timers.push(setTimeout(() => {
+        box.querySelectorAll('.vv-now').forEach(g => g.classList.remove('vv-now'));
+        const g = box.querySelector(`.vv-col[data-c="${c}"]`); if (g) g.classList.add('vv-now');
+      }, lead + c * secPerCol * 1000));
+    }
     function play(which) {
+      if (singing) return;
       stopPlay();
       const ns = notesOf(which);
       if (!ns.length) { fb(f, 'info', 'Nothing to play yet.'); return; }
       Sound.seq(ns);
-      for (let c = 0; c < cols; c++) timers.push(setTimeout(() => {
-        box.querySelectorAll('.vv-now').forEach(g => g.classList.remove('vv-now'));
-        const g = box.querySelector(`.vv-col[data-c="${c}"]`); if (g) g.classList.add('vv-now');
-      }, 80 + c * secPerCol * 1000));
+      lights(80);
       timers.push(setTimeout(stopPlay, 80 + cols * secPerCol * 1000));
     }
     function playCol(c) { const ms = V.map(v => v[c]).filter(Boolean).map(Theory.midi); if (ms.length) Sound.chord(ms, null, 1.1, 0.5); }
-    /* sing along: the given voice plays (the mic stays open); each column takes the last note sung in its time */
+    /* sing (or play) along: after a count-in the given voice plays, the mic stays open, and each column takes the last
+       note that arrives in its time (from the mic, or the keys; a note up to a quarter of a column early counts) */
     function singAlong() {
       if (singing) return;
-      if (Mic.state !== 'on') { fb(f, 'info', 'Turn on the mic in the dock to sing along. You can also play the notes on the keys.'); return; }
       const ctx = Sound.ensure(); if (!ctx) return;
       stopPlay();
       const k = [0, 1].find(v => !fixed.has(v)), gain = ctx.createGain(); gain.gain.value = 1; gain.connect(Sound.master);
-      const spb = secPerCol, t0 = ctx.currentTime + 0.2 + 4 * spb * 0.5;
+      const spb = secPerCol, t0 = ctx.currentTime + 0.2 + 4 * spb * 0.5, mic = Mic.state === 'on';
       Sound.routed(gain, () => {
         for (let b = 0; b < 4; b++) Sound.click(ctx.currentTime + 0.2 + b * spb * 0.5, b === 0, false);
         notesOf(S.cantus).forEach(x => Sound.tone(x.m, t0 + x.t, x.d, 0.55));
       }, { gate: false });
       singing = { k, t0, got: {} };
       bSing.disabled = true;
-      fb(f, 'info', 'Count-in… then sing your line, one note per column. Headphones help.');
-      timers.push(setTimeout(() => {
+      lights((t0 - ctx.currentTime) * 1000);
+      fb(f, 'info', mic ? 'Count-in… then sing your line, one note per column. Headphones keep the cantus out of the mic.' : 'Count-in… then play your line on the keys, one note per column. Turn on the mic to sing it instead.');
+      const finish = () => {
         const s = singing; singing = null; bSing.disabled = false;
+        box.querySelectorAll('.vv-now').forEach(g => g.classList.remove('vv-now'));
         try { gain.disconnect(); } catch (e) { /* gone */ }
         let got = 0;
         Object.keys(s.got).forEach(c => { if (editable(+c, s.k)) { V[s.k][+c] = spell(s.got[c], +c); got++; } });
         render(); emit();
-        fb(f, got ? 'good' : 'info', got ? `${got} note${got === 1 ? '' : 's'} written from your singing. Fix any by playing or with the arrows.` : 'No notes came in. Try again, a little louder.');
-      }, (t0 - ctx.currentTime + cols * spb + 0.4) * 1000));
+        fb(f, got ? 'good' : 'info', got ? `${got} note${got === 1 ? '' : 's'} written down. Fix any by selecting it and playing, or with the arrows.` : `No notes came in. Try again${mic ? ', a little louder' : ''}.`);
+      };
+      timers.push(setTimeout(finish, (t0 - ctx.currentTime + cols * spb + 0.4) * 1000));
     }
     /* input */
     const offs = [];
@@ -1260,8 +1271,8 @@ const PartWriter = {
       if (!alive) return;
       if (d.source === 'mic' && !o.mic) return;
       if (singing) {
-        if (d.source !== 'mic') return;
-        const t = (d.t != null ? d.t : Sound.now()) - (Store.data.settings.micLatency || 0) / 1000, c = Math.floor((t - singing.t0) / secPerCol);
+        const t = (d.t != null ? d.t : Sound.now()) - (d.source === 'mic' ? (Store.data.settings.micLatency || 0) / 1000 : 0);
+        const c = Math.floor((t - singing.t0) / secPerCol + 0.25);
         if (c >= 0 && c < cols) singing.got[c] = d.midi;
         return;
       }
