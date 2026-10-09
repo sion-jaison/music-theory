@@ -395,6 +395,7 @@ function trMount(el, o) {
       <p class="muted small" data-tr="loopinfo">Drag across the waveform to loop a passage, or use Set A and Set B while it plays.</p>
       <div class="eyebrow">Suggested chords <span class="tr-now" data-tr="now"></span></div>
       <div class="tr-strip" data-tr="strip"></div>
+      <div class="row"><button type="button" class="btn small ghost" data-tr="add">+ Add a chord here</button><span class="muted small">for a stretch Motif found nothing in (the loop, or two seconds from the playhead)</span></div>
       <div class="tr-pick" data-tr="pick" hidden></div>
       <div class="eyebrow">Your chord chart</div>
       <div class="tr-chart" data-tr="chart"></div>
@@ -406,7 +407,7 @@ function trMount(el, o) {
   const $ = s => el.querySelector(`[data-tr="${s}"]`);
   const work = el.querySelector('.tr-work'), status = $('status'), strip = $('strip'), pickEl = $('pick'), canvas = $('wave').querySelector('canvas');
   let clip = null, player = null, segs = [], key = null, sel = -1, cand = null, loop = null, peaks = null, raf = 0, alive = true, token = 0, saved = false;
-  let liveTrack = null, liveDb = null, liveAn = null, nowSym = null, lastLive = 0, drag = null;
+  let wasPlaying = false, liveTrack = null, liveDb = null, liveAn = null, nowSym = null, lastLive = 0, drag = null;
   ChordIn.start();
   const say = (kind, text) => fb(status, kind, text);
   const confirmed = () => segs.filter(s => s.ok).sort((a, b) => a.t - b.t);
@@ -417,6 +418,7 @@ function trMount(el, o) {
     clip = c; clip.duration = clip.samples.length / clip.sampleRate;
     segs = []; sel = -1; cand = null; loop = null; saved = false; key = null; nowSym = null;
     player = trPlayer(clip, an => { liveAn = an; liveDb = new Float32Array(an.frequencyBinCount); liveTrack = createChordTracker({ need: 3, release: 5 }); });
+    if (player.media) clip.buffer = null;   /* the <audio> element plays it: no need to keep the decoded copy */
     work.hidden = false;
     $('name').textContent = clip.name; $('dur').textContent = trClock(clip.duration);
     $('nm').value = o.save && o.save.name ? o.save.name : (clip.practice ? 'Practice transcription' : 'Transcription: ' + clip.name.replace(/\.[a-z0-9]+$/i, '')).slice(0, 40);
@@ -469,20 +471,22 @@ function trMount(el, o) {
   /* ----- painting ----- */
   function paint() {
     if (!clip) return;
-    strip.innerHTML = segs.length ? segs.map((s, i) => `<button type="button" class="tr-seg${s.ok ? ' ok' : ''}${i === sel ? ' sel' : ''}" data-i="${i}" aria-pressed="${i === sel}"><small class="mono">${trClock(s.t)}</small><b>${esc(Theory.pretty(s.ok ? s.chosen : s.sym))}</b>${s.ok ? '<i aria-label="confirmed">✓</i>' : ''}</button>`).join('') : '<span class="muted small">No suggestions yet.</span>';
+    strip.innerHTML = segs.length ? segs.map((s, i) => `<button type="button" class="tr-seg${s.ok ? ' ok' : ''}${i === sel ? ' sel' : ''}" data-i="${i}" aria-pressed="${i === sel}"><small class="mono">${trClock(s.t)}</small><b>${esc(Theory.pretty(s.ok ? s.chosen : s.sym || '?'))}</b>${s.ok ? '<i aria-label="confirmed">✓</i>' : ''}</button>`).join('') : '<span class="muted small">No suggestions yet.</span>';
     strip.querySelectorAll('.tr-seg').forEach(b => { b.onclick = () => select(+b.dataset.i); });
     const s = segs[sel];
     pickEl.hidden = !s;
     if (s) {
-      const alts = [...new Set((s.alts || []).concat(key ? Theory.diatonic(key.tonic, key.mode === 'minor' ? 'minor' : 'major').slice(0, 6).map(c => c.sym) : []))].filter(x => x !== s.sym).slice(0, 6);
+      const k = key || { tonic: 'C', mode: 'major' };
+      const alts = [...new Set((s.alts || []).concat(Theory.diatonic(k.tonic, k.mode === 'minor' ? 'minor' : 'major').slice(0, 6).map(c => c.sym)))].filter(x => x !== s.sym).slice(0, 6);
       const use = cand || s.sym;
-      pickEl.innerHTML = `<p><span class="mono">${trClock(s.t)}–${trClock(s.t + s.d)}</span> · Motif hears <b class="tr-sug">${esc(Theory.pretty(s.sym))}</b>${s.ok ? `. You confirmed <b>${esc(Theory.pretty(s.chosen))}</b>.` : '. Listen, then play it on the keys or tap Yes.'}</p>
-        <div class="row"><button type="button" class="btn small" data-tp="bit">▶ This bit</button><button type="button" class="btn small" data-tp="hear">▶ ${esc(Theory.pretty(use))} on its own</button><button type="button" class="btn small primary" data-tp="yes">${cand ? '✓ Use ' + esc(Theory.pretty(cand)) : '✓ Yes, that’s it'}</button></div>
+      const said = s.sym ? `Motif hears <b class="tr-sug">${esc(Theory.pretty(s.sym))}</b>` : 'Motif found no clear chord here';
+      pickEl.innerHTML = `<p><span class="mono">${trClock(s.t)}–${trClock(s.t + s.d)}</span> · ${said}${s.ok ? `. You confirmed <b>${esc(Theory.pretty(s.chosen))}</b>.` : s.sym ? '. Listen, then play it on the keys or tap Yes.' : '. Play the chord you hear on the keys, or pick one below.'}</p>
+        <div class="row"><button type="button" class="btn small" data-tp="bit">▶ This bit</button>${use ? `<button type="button" class="btn small" data-tp="hear">▶ ${esc(Theory.pretty(use))} on its own</button>` : ''}<button type="button" class="btn small primary" data-tp="yes"${use ? '' : ' disabled'}>${cand ? '✓ Use ' + esc(Theory.pretty(cand)) : '✓ Yes, that’s it'}</button></div>
         <div class="tr-alts"><span class="muted small">Not quite? Tap another to hear it:</span>${alts.map(a => `<button type="button" class="chip tr-alt${a === cand ? ' on' : ''}" data-alt="${esc(a)}">${esc(Theory.pretty(a))}</button>`).join('')}</div>
         <p class="fb" data-tp="fb"></p>`;
       pickEl.querySelector('[data-tp="bit"]').onclick = () => { loop = trLoopOf(s.t, s.t + s.d, clip.duration); player.seek(loop.a); player.play(); paintPlay(); };
-      pickEl.querySelector('[data-tp="hear"]').onclick = () => hearChord(use);
-      pickEl.querySelector('[data-tp="yes"]').onclick = () => confirm(sel, cand || s.sym);
+      if (use) pickEl.querySelector('[data-tp="hear"]').onclick = () => hearChord(use);
+      pickEl.querySelector('[data-tp="yes"]').onclick = () => { if (cand || s.sym) confirm(sel, cand || s.sym); };
       pickEl.querySelectorAll('[data-alt]').forEach(b => { b.onclick = () => { cand = b.dataset.alt; hearChord(cand); paint(); }; });
     }
     const ch = confirmed();
@@ -519,6 +523,7 @@ function trMount(el, o) {
     if (!alive) return;
     raf = requestAnimationFrame(tick);
     if (!player || !clip) return;
+    if (player.playing !== wasPlaying) { wasPlaying = player.playing; paintPlay(); }
     let tm = player.time;
     if (player.playing) {
       const w = trWrap(tm, loop);
@@ -566,6 +571,15 @@ function trMount(el, o) {
   $('setA').onclick = () => { if (!player) return; const t = player.time; loop = loop && loop.b > t + 0.25 ? trLoopOf(t, loop.b, clip.duration) : trLoopOf(t, Math.min(clip.duration, t + 4), clip.duration); paint(); };
   $('setB').onclick = () => { if (!player) return; const t = player.time; loop = trLoopOf(loop ? loop.a : Math.max(0, t - 4), t, clip.duration); paint(); };
   $('clear').onclick = () => { loop = null; paint(); };
+  $('add').onclick = () => {
+    if (!player) return;
+    const a = loop ? loop.a : player.time, b = loop ? loop.b : Math.min(clip.duration, player.time + 2);
+    if (b - a < 0.2) return;
+    const seg = { t: +a.toFixed(3), d: +(b - a).toFixed(3), sym: null, root: null, q: null, rootPc: null, score: 0, alts: [], added: true };
+    segs.push(seg); segs.sort((x, y) => x.t - y.t);
+    select(segs.indexOf(seg), true);
+    say('info', 'Added a chord at ' + trClock(a) + '. Play the chord you hear on the keys.');
+  };
   $('speed').oninput = () => { const r = +$('speed').value / 100; $('rate').textContent = Math.round(r * 100) + '%'; if (player) player.setRate(r); };
   const timeAt = ev => { const r = canvas.getBoundingClientRect(); return r.width > 0 && clip ? Math.max(0, Math.min(clip.duration, (ev.clientX - r.left) / r.width * clip.duration)) : null; };
   canvas.addEventListener('pointerdown', ev => { const t = timeAt(ev); if (t == null) return; drag = { a: t, x: ev.clientX }; try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* fine */ } });

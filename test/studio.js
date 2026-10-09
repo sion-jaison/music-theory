@@ -309,10 +309,16 @@ const close = (a, b, eps) => Math.abs(a - b) <= (eps == null ? 1e-6 : eps);
   t.check(/Drag across/.test(t.$('[data-tr="loopinfo"]').textContent), 'transcribe: Clear loop');
   t.click('[data-tr="setA"]'); t.click('[data-tr="setB"]'); await t.wait(20);
   t.check(/Looping/.test(t.$('[data-tr="loopinfo"]').textContent), 'transcribe: Set A and Set B make a loop at the playhead');
+  const nSeg = t.$$('.tr-seg').length;
+  t.click('[data-tr="add"]'); await t.wait(20);
+  t.check(t.$$('.tr-seg').length === nSeg + 1 && t.$('.tr-seg.sel b').textContent === '?' && t.$('[data-tp="yes"]').disabled, 'transcribe: Add a chord here makes an empty slot to fill by ear');
+  t.pc('D'); t.pc('F'); t.pc('A'); await t.wait(40);
+  t.click('[data-tp="yes"]'); await t.wait(20);
+  t.check(t.$$('.tr-cell b').map(b => b.textContent).join(' ') === 'C Am F Em Dm', 'transcribe: playing Dm there and tapping Use Dm puts it in the chart');
   t.$('[data-tr="nm"]').value = 'Practice chords';
   t.click('[data-tr="save"]'); await t.wait(20);
   let saved = M.Store.data.sketches[0];
-  t.check(saved && saved.name === 'Practice chords' && saved.tags.indexOf('transcription') >= 0 && saved.chords.map(c => c.sym).join() === 'C,Am,F,Em' && saved.chords[0].t === 0 && saved.key === 'C' && saved.mode === 'major' && saved.bpm === 92, 'transcribe: saves the chart to the sketchbook (chords from 0 s, key C major, tag transcription)');
+  t.check(saved && saved.name === 'Practice chords' && saved.tags.indexOf('transcription') >= 0 && saved.chords.map(c => c.sym).join() === 'C,Am,F,Em,Dm' && saved.chords[0].t === 0 && saved.key === 'C' && saved.mode === 'major' && saved.bpm === 92, 'transcribe: saves the chart to the sketchbook (chords from 0 s, key C major, tag transcription)');
   t.check(/Saved “Practice chords”/.test(t.$('[data-tr="saved"]').textContent), 'transcribe: says it saved');
 
   /* an audio file from the device: no decoder here, so the WAV reader opens it */

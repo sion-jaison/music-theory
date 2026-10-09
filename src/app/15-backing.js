@@ -20,6 +20,8 @@
    Roles: drums, bass, chords, melody. Every role has its own gain node under the backing's bus.
    ================================================================= */
 const BK_ROLES = ['drums', 'bass', 'chords', 'melody'];
+/* each role's level in the mix, and the band's, leaving headroom when everything plays at once */
+const BK_LEVEL = { drums: 0.75, bass: 0.9, chords: 0.85, melody: 1 }, BK_BUS = 0.8;
 const BK_BASS_LO = 28, BK_BASS_HI = 52;
 /* eighths and sixteenths of a 4/4 bar, with louder downbeats */
 const bkGrid = (len, step, on, off) => { const out = []; for (let x = 0; x < len - 1e-9; x += step) out.push([+x.toFixed(4), Math.abs(x - Math.round(x)) < 1e-9 ? on : off]); return out; };
@@ -453,9 +455,9 @@ function bkStart(o) {
   ctl.bpm = o.bpm || arr.style.bpm;
   BK_ROLES.forEach(r => { ctl.muted[r] = !!(o.mute && o.mute[r]); });
   if (!ctx) return Object.assign(ctl, { stop() {}, setMute(r, on) { ctl.muted[r] = !!on; }, setChords() {}, setTempo() {}, setStyle() {}, time: () => 0, spb: 60 / ctl.bpm });
-  const bus = ctx.createGain(); bus.gain.value = 1; bus.connect(Sound.master);
+  const bus = ctx.createGain(); bus.gain.value = BK_BUS; bus.connect(Sound.master);
   const gains = {};
-  BK_ROLES.forEach(r => { const g = ctx.createGain(); g.gain.value = ctl.muted[r] ? 0 : 1; g.connect(bus); gains[r] = g; });
+  BK_ROLES.forEach(r => { const g = ctx.createGain(); g.gain.value = ctl.muted[r] ? 0 : BK_LEVEL[r]; g.connect(bus); gains[r] = g; });
   ctl.bus = bus; ctl.gains = gains;
   let timers = [], pumpId = 0, n = -(o.countIn || 0), nextT = ctx.currentTime + 0.12, ending = false, pending = [];
   const spb = () => 60 / ctl.bpm;
@@ -517,7 +519,8 @@ function bkStart(o) {
     if (!gains[role]) return;
     on = !!on;
     const was = ctl.muted[role]; ctl.muted[role] = on;
-    try { const t = Sound.now(), g = gains[role].gain; g.setValueAtTime(on ? 1 : 0.0001, t); g.linearRampToValueAtTime(on ? 0.0001 : 1, t + 0.03); } catch (err) { gains[role].gain.value = on ? 0 : 1; }
+    const lv = BK_LEVEL[role];
+    try { const t = Sound.now(), g = gains[role].gain; g.setValueAtTime(on ? lv : 0.0001, t); g.linearRampToValueAtTime(on ? 0.0001 : lv, t + 0.03); } catch (err) { gains[role].gain.value = on ? 0 : lv; }
     /* unmuting: play this role's notes already in the window, from now on */
     if (was && !on && ctl.playing) { const now = Sound.now() + 0.03; pending.forEach(p => { if (p.e.role === role && p.when > now) route(role, () => bkSound(p.e, p.when, p.s)); }); }
   };
