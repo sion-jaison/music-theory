@@ -389,7 +389,7 @@ function vlCheck(voices, opts) {
 function vlSpecies(X, add, beat, nm) {
   const N = X.N, C = X.cols, sp = X.sp, cp = X.cp, cf = X.cantus, above = cp === 0;
   const iv = c => (N[0][c] && N[1][c] ? vlIntervalClass(N[1][c].name, N[0][c].name) : null);
-  const ivWords = v => `a ${v.name} (${Theory.stripOct(v.lo)}–${Theory.stripOct(v.hi)})`;
+  const ivWords = v => `${/^(augmented|octave|eleventh)/.test(v.name) ? 'an' : 'a'} ${v.name} (${Theory.stripOct(v.lo)}–${Theory.stripOct(v.hi)})`;
   for (let c = 0; c < C; c++) {
     const v = iv(c); if (!v) continue;
     const strong = X.strong[c];
@@ -1027,3 +1027,433 @@ function vvSvg(o) {
   return `<svg class="vv" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(aria)}">${bg}${staffSvg}${notes}${over}${labs}${hits}</svg>`;
 }
 const VoiceView = { svg: vvSvg, clefFor: vvClefFor };
+
+/* =================================================================
+   PartWriter: write voices against given ones, checked as you go
+   PartWriter.mount(el, opts) → { voices, problems, set(voices), select(col, voice), play(), destroy() }
+   opts: { voices: 2 | 4 (default 4), cols, key, mode, style ('chorale' default for four voices; 'species1' for two with a
+           cantus), romans (shown under the bass and used by the checker),
+           given: { cantus, soprano | upper, alto, tenor, bass | lower } (fixed lines, one entry per column; a cantus may
+                  give one note per bar in species 2 and 4), cantusAbove (two voices: the cantus is the upper one),
+           initial (voices to start from), names, staves, beats, secPerCol (playback, seconds per column), skip ([{ col, voice }]
+           cells that stay empty; species 2 and 4 skip the cells a whole note or the opening rest covers), check (extra
+           VoiceLead.check options), order ('column' for four voices, 'voice' for two: where the selection goes after a note),
+           mic (default true), sing (default true: a Sing along button when one voice is written against a given one),
+           onChange(voices, problems) }
+   Select a cell by clicking it (or a voice button), then play a note: on-screen keys, computer keys A–K, MIDI, or the
+   mic. The note keeps the octave you played. With the score focused: ←/→ column, ↑/↓ half step (an empty cell gets a
+   note), Shift+↑/↓ octave, Alt+↑/↓ or Page Up/Down voice, Delete clears, Enter plays the column. Problems show as
+   marks and as sentences under the score, errors first; click a sentence to jump to it.
+   ================================================================= */
+let pwUid = 0;
+function pwSetup(o) {
+  const n = o.voices === 2 ? 2 : (o.voices || 4);
+  const given = o.given || {};
+  const style = o.style || (n === 2 && given.cantus ? 'species1' : 'chorale');
+  const sp = /^species/.test(style) ? +style.slice(7) || 1 : 0;
+  /* where each given line goes */
+  const lines = new Array(n).fill(null);
+  const put = (k, line) => { if (line && k >= 0 && k < n) lines[k] = line.slice(); };
+  if (n === 2) {
+    put(0, given.soprano || given.upper); put(1, given.bass || given.lower);
+    if (given.cantus) put(o.cantusAbove ? 0 : 1, given.cantus);
+  } else { put(0, given.soprano); put(1, given.alto); put(n - 2, given.tenor); put(n - 1, given.bass); }
+  const per = sp === 2 || sp === 4 ? 2 : 1;
+  let cols = o.cols || 0;
+  lines.forEach(l => { if (l) cols = Math.max(cols, l.length); });
+  if (o.romans) cols = Math.max(cols, o.romans.length);
+  (o.initial || []).forEach(v => { if (v) cols = Math.max(cols, v.length); });
+  /* a cantus given one note per bar spreads over the bar's columns */
+  if (per > 1 && given.cantus) {
+    const k = n === 2 && o.cantusAbove ? 0 : n - 1;
+    if (lines[k] && !lines[k].some(x => x == null) && (!o.cols || lines[k].length * per <= cols) && lines[k].length * per >= cols) {
+      const spread = []; lines[k].forEach(x => { spread.push(x); spread.push(null); });
+      lines[k] = spread; cols = Math.max(cols, spread.length);
+    }
+  }
+  const fixed = lines.map((l, k) => (l ? k : -1)).filter(k => k >= 0);
+  const cantus = n === 2 && given.cantus ? (o.cantusAbove ? 0 : 1) : null;
+  const skip = new Set((o.skip || []).map(s => s.col + ':' + s.voice));
+  if (per > 1 && cantus != null && !o.skip) {
+    const cp = 1 - cantus;
+    if (sp === 4) skip.add('0:' + cp);
+    if (cols % 2 === 0) skip.add((cols - 1) + ':' + cp);
+  }
+  return { n, given, style, sp, lines, cols, fixed, cantus, skip, per };
+}
+const PartWriter = {
+  mount(el, o) {
+    o = Object.assign({ key: 'C', mode: 'major', mic: true, sing: true }, o || {});
+    const S = pwSetup(o), n = S.n, cols = S.cols, key = Theory.stripOct(o.key), mode = o.mode === 'minor' ? 'minor' : 'major';
+    const fixed = new Set(S.fixed), uid = ++pwUid;
+    const names = o.names || (n === 4 ? ['soprano', 'alto', 'tenor', 'bass'] : S.cantus != null ? (S.cantus === 0 ? ['cantus', 'counterpoint'] : ['counterpoint', 'cantus']) : ['upper voice', 'lower voice']);
+    const romans = o.romans || null, chordsOn = romans && !S.sp;
+    const secPerCol = o.secPerCol || (S.sp === 1 ? 1.1 : S.sp ? 0.7 : 1);
+    const order = o.order || (n === 4 ? 'column' : 'voice');
+    const chordNotes = c => { const ch = chordsOn ? vlRoman(romans[c], key, mode) : null; return ch ? ch.notes : null; };
+    const spell = (m, c) => vlSpell(m, key, mode, chordNotes(c));
+    const norm = (x, c) => { const nn = vlNote(x, key, mode, chordNotes(c)); return nn ? nn.name : null; };
+    /* the grid of note names */
+    let V = Array.from({ length: n }, (_, k) => Array.from({ length: cols }, (_, c) => {
+      if (S.lines[k]) return norm(S.lines[k][c], c);
+      const init = o.initial && o.initial[k];
+      return init ? norm(init[c], c) : null;
+    }));
+    const editable = (c, k) => c >= 0 && c < cols && k >= 0 && k < n && !fixed.has(k) && !S.skip.has(c + ':' + k);
+    const checkOpts = () => Object.assign({ key, mode, style: S.style, romans: chordsOn ? romans : null, fixed: S.fixed, names, beats: o.beats }, S.cantus != null ? { cantus: S.cantus } : {}, o.check || {});
+    let problems = [], sel = null, timers = [], singing = null, clearArm = 0, alive = true;
+    const firstEmpty = () => { for (let c = 0; c < cols; c++) for (let k = 0; k < n; k++) if (editable(c, k) && !V[k][c]) return { col: c, voice: k }; return null; };
+    const firstEditable = () => { for (let c = 0; c < cols; c++) for (let k = 0; k < n; k++) if (editable(c, k)) return { col: c, voice: k }; return null; };
+    sel = firstEmpty() || firstEditable();
+    const voiceBtns = names.map((nm, k) => `<button type="button" class="choice" data-v="${k}"${fixed.has(k) ? ' disabled' : ''} aria-pressed="false">${esc(vlCap(nm))}${fixed.has(k) ? ' (given)' : ''}</button>`).join('');
+    el.innerHTML = `<div class="pw">
+      <div class="pw-top"><span class="chip live">${esc(Theory.keyName(key, mode))}</span><div class="pw-voices" role="group" aria-label="Voice to write">${voiceBtns}</div></div>
+      <div class="vv-box pw-score" tabindex="0" role="group" aria-label="The score. Click a note or a blank to select it. Arrow keys move and change notes."></div>
+      <div class="pw-ed" role="toolbar" aria-label="Edit the selected note">
+        <button type="button" class="btn small" data-e="prev" aria-label="Previous column" title="Previous column (←)">←</button><button type="button" class="btn small" data-e="next" aria-label="Next column" title="Next column (→)">→</button>
+        <button type="button" class="btn small" data-e="up" aria-label="Half step up" title="Half step up (↑)">↑</button><button type="button" class="btn small" data-e="down" aria-label="Half step down" title="Half step down (↓)">↓</button>
+        <button type="button" class="btn small" data-e="oup" title="Octave up (Shift+↑)">8va ↑</button><button type="button" class="btn small" data-e="odown" title="Octave down (Shift+↓)">8va ↓</button>
+        <button type="button" class="btn small ghost" data-e="del" title="Clear this note (Delete)">Clear note</button>
+      </div>
+      <p class="pw-info" aria-live="polite"></p>
+      <div class="row"><button type="button" class="btn small" data-a="play">▶ Play all</button><button type="button" class="btn small" data-a="one">▶ Play this voice</button>${o.sing && n === 2 && fixed.size === 1 ? '<button type="button" class="btn small" data-a="sing">Sing along</button>' : ''}<button type="button" class="btn small ghost" data-a="clear">Clear all</button></div>
+      <p class="fb info pw-fb" aria-live="polite"></p>
+      <p class="pw-count" aria-live="polite"></p>
+      <ul class="pw-probs"></ul>
+    </div>`;
+    const $ = s => el.querySelector(s);
+    const box = $('.pw-score'), info = $('.pw-info'), f = $('.pw-fb'), count = $('.pw-count'), list = $('.pw-probs');
+    const bOne = $('[data-a="one"]'), bClear = $('[data-a="clear"]'), bSing = $('[data-a="sing"]');
+    const colName = c => 'beat ' + (c + 1);
+    function describe() {
+      if (!sel) return 'Every note is given here.';
+      const x = V[sel.voice][sel.col];
+      return `${vlCap(colName(sel.col))}, ${names[sel.voice]}: ${x ? Theory.pretty(x) + '. Play a note to change it, or ↑ ↓ to move it.' : 'blank. Play a note, or press ↑ to write one.'}`;
+    }
+    const RULE_LINES = ['parallel5', 'parallel8', 'parallelUnison', 'contrary5', 'contrary8', 'direct5', 'direct8'];
+    function render() {
+      problems = vlCheck(V, checkOpts());
+      const marks = [], lines = [], seen = {};
+      problems.forEach(p => {
+        p.voices.forEach(v => p.cols.forEach(c => {
+          const k = c + ':' + v;
+          if (seen[k] === 'error') return;
+          seen[k] = p.severity === 'error' ? 'error' : (seen[k] || 'warn');
+        }));
+        if (RULE_LINES.indexOf(p.rule) >= 0 && p.cols.length === 2) p.voices.forEach(v => lines.push({ from: { col: p.cols[0], voice: v }, to: { col: p.cols[1], voice: v }, kind: p.severity }));
+      });
+      Object.keys(seen).forEach(k => { const [c, v] = k.split(':').map(Number); marks.push({ col: c, voice: v, kind: seen[k] }); });
+      const ph = [];
+      for (let c = 0; c < cols; c++) for (let k = 0; k < n; k++) if (editable(c, k) && !V[k][c]) ph.push({ col: c, voice: k });
+      box.innerHTML = vvSvg({ voices: V, key, mode, style: S.style, labels: romans, marks, lines, sel, editable: true, placeholders: ph, fixed: S.fixed, staves: o.staves, cantus: S.cantus, names: names.map(vlCap) });
+      el.querySelectorAll('[data-v]').forEach(b => b.setAttribute('aria-pressed', String(!!sel && +b.dataset.v === sel.voice)));
+      bOne.textContent = '▶ Play ' + (sel ? names[sel.voice] : 'one voice');
+      info.textContent = describe();
+      const sum = VoiceLead.summary(problems), filled = V.some((v, k) => !fixed.has(k) && v.some(Boolean));
+      const words = (x, w) => `${x} ${w}${x === 1 ? '' : 's'}`;
+      count.textContent = !filled ? '' : sum.errors ? `${words(sum.errors, 'error')}${sum.warnings ? ' and ' + words(sum.warnings, 'warning') : ''}.` : sum.warnings ? `No errors. ${words(sum.warnings, 'warning')}: worth a look, but allowed.` : 'No problems so far.';
+      const shown = problems.slice(0, 12);
+      list.innerHTML = shown.map((p, i) => `<li class="${p.severity}"><span class="pw-kind">${p.severity === 'error' ? 'Error' : 'Warning'}</span><button type="button" data-p="${i}"><span class="pw-rule">${esc(VL_RULES[p.rule].name)}.</span> ${esc(p.text)}</button></li>`).join('')
+        + (problems.length > shown.length ? `<li class="warn"><span class="pw-kind">More</span><span>${problems.length - shown.length} more after you fix these.</span></li>` : '');
+    }
+    const emit = () => { if (o.onChange) o.onChange(V.map(v => v.slice()), problems.slice()); };
+    function setCell(c, k, name, quiet) {
+      V[k][c] = name;
+      render(); emit();
+      if (name && !quiet) Sound.tone(Theory.midi(name), null, 0.5, 0.75);
+    }
+    /* after a note: the next empty cell, voice by voice or column by column */
+    function advance() {
+      if (!sel) return;
+      const cells = [];
+      if (order === 'voice') { for (let c = sel.col + 1; c < cols; c++) cells.push([c, sel.voice]); for (let c = 0; c < cols; c++) for (let k = 0; k < n; k++) cells.push([c, k]); }
+      else { for (let k = sel.voice + 1; k < n; k++) cells.push([sel.col, k]); for (let c = sel.col + 1; c < cols; c++) for (let k = 0; k < n; k++) cells.push([c, k]); for (let c = 0; c <= sel.col; c++) for (let k = 0; k < n; k++) cells.push([c, k]); }
+      const nx = cells.find(([c, k]) => editable(c, k) && !V[k][c]);
+      if (nx) sel = { col: nx[0], voice: nx[1] };
+      else { const c = Math.min(cols - 1, sel.col + 1); if (editable(c, sel.voice)) sel = { col: c, voice: sel.voice }; }
+    }
+    function select(c, k) {
+      if (!editable(c, k)) {
+        if (V[k] && V[k][c]) { Sound.tone(Theory.midi(V[k][c]), null, 0.6, 0.7); fb(f, 'info', `The ${names[k]} is given: ${Theory.pretty(V[k][c])}.`); }
+        return;
+      }
+      sel = { col: c, voice: k }; render();
+    }
+    function moveCol(d) {
+      if (!sel) return;
+      for (let c = sel.col + d; c >= 0 && c < cols; c += d) if (editable(c, sel.voice)) { sel = { col: c, voice: sel.voice }; render(); return; }
+    }
+    function moveVoice(d) {
+      if (!sel) return;
+      for (let k = sel.voice + d; k >= 0 && k < n; k += d) if (editable(sel.col, k)) { sel = { col: sel.col, voice: k }; render(); return; }
+    }
+    function nudge(by) {
+      if (!sel) return;
+      const x = V[sel.voice][sel.col];
+      let m;
+      if (!x) {
+        /* an empty cell gets the note its neighbours suggest */
+        const row = V[sel.voice];
+        let near = null; for (let d = 1; d < cols && !near; d++) near = row[sel.col - d] || row[sel.col + d] || null;
+        m = near ? Theory.midi(near) : (n === 4 ? [72, 65, 57, 48][sel.voice] : sel.voice === 0 ? 72 : 55);
+      } else m = Theory.midi(x) + by;
+      if (m < 28 || m > 96) { fb(f, 'info', 'That is as far as it goes.'); return; }
+      setCell(sel.col, sel.voice, spell(m, sel.col));
+    }
+    function clearCell() { if (sel && V[sel.voice][sel.col]) { setCell(sel.col, sel.voice, null); fb(f, 'info', 'Cleared.'); } }
+    /* playback */
+    function stopPlay() { timers.forEach(clearTimeout); timers = []; box.querySelectorAll('.vv-now').forEach(g => g.classList.remove('vv-now')); }
+    function notesOf(which) {
+      const out = [];
+      V.forEach((row, k) => {
+        if (which != null && which !== k) return;
+        let cur = null;
+        row.forEach((x, c) => {
+          const tie = cur && x && Theory.midi(x) === cur.m && S.sp === 4 && c % 2 === 0;
+          if (!x) { if (cur && (S.sp === 2 || S.sp === 4) && (k === S.cantus || c === cols - 1)) cur.d += secPerCol; else cur = null; return; }
+          if (tie) { cur.d += secPerCol; return; }
+          cur = { m: Theory.midi(x), t: +(c * secPerCol).toFixed(3), d: secPerCol, v: k === 0 || k === n - 1 ? 0.7 : 0.5 };
+          out.push(cur);
+        });
+      });
+      return out.map(x => Object.assign({}, x, { d: +(x.d * 0.94).toFixed(3) }));
+    }
+    function play(which) {
+      stopPlay();
+      const ns = notesOf(which);
+      if (!ns.length) { fb(f, 'info', 'Nothing to play yet.'); return; }
+      Sound.seq(ns);
+      for (let c = 0; c < cols; c++) timers.push(setTimeout(() => {
+        box.querySelectorAll('.vv-now').forEach(g => g.classList.remove('vv-now'));
+        const g = box.querySelector(`.vv-col[data-c="${c}"]`); if (g) g.classList.add('vv-now');
+      }, 80 + c * secPerCol * 1000));
+      timers.push(setTimeout(stopPlay, 80 + cols * secPerCol * 1000));
+    }
+    function playCol(c) { const ms = V.map(v => v[c]).filter(Boolean).map(Theory.midi); if (ms.length) Sound.chord(ms, null, 1.1, 0.5); }
+    /* sing along: the given voice plays (the mic stays open); each column takes the last note sung in its time */
+    function singAlong() {
+      if (singing) return;
+      if (Mic.state !== 'on') { fb(f, 'info', 'Turn on the mic in the dock to sing along. You can also play the notes on the keys.'); return; }
+      const ctx = Sound.ensure(); if (!ctx) return;
+      stopPlay();
+      const k = [0, 1].find(v => !fixed.has(v)), gain = ctx.createGain(); gain.gain.value = 1; gain.connect(Sound.master);
+      const spb = secPerCol, t0 = ctx.currentTime + 0.2 + 4 * spb * 0.5;
+      Sound.routed(gain, () => {
+        for (let b = 0; b < 4; b++) Sound.click(ctx.currentTime + 0.2 + b * spb * 0.5, b === 0, false);
+        notesOf(S.cantus).forEach(x => Sound.tone(x.m, t0 + x.t, x.d, 0.55));
+      }, { gate: false });
+      singing = { k, t0, got: {} };
+      bSing.disabled = true;
+      fb(f, 'info', 'Count-in… then sing your line, one note per column. Headphones help.');
+      timers.push(setTimeout(() => {
+        const s = singing; singing = null; bSing.disabled = false;
+        try { gain.disconnect(); } catch (e) { /* gone */ }
+        let got = 0;
+        Object.keys(s.got).forEach(c => { if (editable(+c, s.k)) { V[s.k][+c] = spell(s.got[c], +c); got++; } });
+        render(); emit();
+        fb(f, got ? 'good' : 'info', got ? `${got} note${got === 1 ? '' : 's'} written from your singing. Fix any by playing or with the arrows.` : 'No notes came in. Try again, a little louder.');
+      }, (t0 - ctx.currentTime + cols * spb + 0.4) * 1000));
+    }
+    /* input */
+    const offs = [];
+    offs.push(Bus.on('note', d => {
+      if (!alive) return;
+      if (d.source === 'mic' && !o.mic) return;
+      if (singing) {
+        if (d.source !== 'mic') return;
+        const t = (d.t != null ? d.t : Sound.now()) - (Store.data.settings.micLatency || 0) / 1000, c = Math.floor((t - singing.t0) / secPerCol);
+        if (c >= 0 && c < cols) singing.got[c] = d.midi;
+        return;
+      }
+      if (!sel || !editable(sel.col, sel.voice)) return;
+      const c = sel.col, k = sel.voice;
+      V[k][c] = spell(d.midi, c);
+      advance(); render(); emit();
+      fb(f, 'info', '');
+    }));
+    box.addEventListener('click', ev => {
+      const t = ev.target.closest && ev.target.closest('[data-col][data-voice]');
+      if (!t) return;
+      select(+t.getAttribute('data-col'), +t.getAttribute('data-voice'));
+      try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); }
+    });
+    box.addEventListener('keydown', ev => {
+      let handled = true;
+      const k = ev.key;
+      if ((k === 'ArrowUp' || k === 'ArrowDown') && ev.altKey) moveVoice(k === 'ArrowUp' ? -1 : 1);
+      else if (k === 'PageUp' || k === 'PageDown') moveVoice(k === 'PageUp' ? -1 : 1);
+      else if (k === 'ArrowUp' || k === 'ArrowDown') nudge((k === 'ArrowUp' ? 1 : -1) * (ev.shiftKey ? 12 : 1));
+      else if (k === 'ArrowLeft' || k === 'ArrowRight') moveCol(k === 'ArrowLeft' ? -1 : 1);
+      else if (k === 'Home' || k === 'End') { if (sel) { const c0 = k === 'Home' ? 0 : cols - 1; moveCol(0); for (let c = c0; c >= 0 && c < cols; c += k === 'Home' ? 1 : -1) if (editable(c, sel.voice)) { sel = { col: c, voice: sel.voice }; render(); break; } } }
+      else if (k === 'Delete' || k === 'Backspace') clearCell();
+      else if (k === 'Enter') { if (sel) playCol(sel.col); }
+      else handled = false;
+      if (handled) { ev.preventDefault(); ev.stopPropagation(); }
+    });
+    el.querySelectorAll('[data-e]').forEach(b => { b.onclick = () => ({ prev: () => moveCol(-1), next: () => moveCol(1), up: () => nudge(1), down: () => nudge(-1), oup: () => nudge(12), odown: () => nudge(-12), del: clearCell })[b.dataset.e](); });
+    el.querySelectorAll('[data-v]').forEach(b => { b.onclick = () => { const k = +b.dataset.v; if (!sel) return; if (editable(sel.col, k)) select(sel.col, k); else { for (let c = 0; c < cols; c++) if (editable(c, k)) { select(c, k); break; } } }; });
+    list.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-p]'); if (!b) return;
+      const p = problems[+b.dataset.p]; if (!p) return;
+      const k = p.voices.find(v => editable(p.col, v));
+      if (k != null) { sel = { col: p.col, voice: k }; render(); }
+      try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); }
+    });
+    $('[data-a="play"]').onclick = () => play(null);
+    bOne.onclick = () => play(sel ? sel.voice : 0);
+    if (bSing) bSing.onclick = singAlong;
+    bClear.onclick = () => {
+      if (!clearArm) { bClear.textContent = 'Clear all? Press again'; clearArm = setTimeout(() => { clearArm = 0; bClear.textContent = 'Clear all'; }, 3000); return; }
+      clearTimeout(clearArm); clearArm = 0; bClear.textContent = 'Clear all';
+      V = V.map((row, k) => row.map((x, c) => (editable(c, k) ? null : x)));
+      sel = firstEmpty() || sel; render(); emit(); fb(f, 'info', 'Cleared. Start again from the first blank.');
+    };
+    render();
+    return {
+      get voices() { return V.map(v => v.slice()); },
+      get problems() { return problems.slice(); },
+      get selected() { return sel ? Object.assign({}, sel) : null; },
+      get cols() { return cols; },
+      /* how many editable cells there are, and how many hold a note */
+      get progress() { let need = 0, have = 0; for (let c = 0; c < cols; c++) for (let k = 0; k < n; k++) if (editable(c, k)) { need++; if (V[k][c]) have++; } return { need, have }; },
+      /* notes [{ m, t, d }] in seconds, every voice, as playback and sketches use them */
+      get notes() { return notesOf(null); },
+      secPerCol,
+      set(voices) { V = V.map((row, k) => row.map((x, c) => (editable(c, k) ? norm(voices[k] ? voices[k][c] : null, c) : x))); render(); emit(); },
+      select(c, k) { select(c, k); },
+      play() { play(null); },
+      destroy() { alive = false; offs.forEach(fn => fn()); stopPlay(); clearTimeout(clearArm); singing = null; }
+    };
+  }
+};
+
+/* PartWriter with a name and Save.
+   p: { prompt, voices, cols, given, romans, key, mode, style, need ('no-errors' default | 'complete'), name, placeholder,
+        initial, cantusAbove, staves, secPerCol, save: { level, tags, prompt, from, extra } }
+   Save opens once every cell is written and (with 'no-errors') nothing is an error; warnings are allowed. It saves
+   { name, notes (every voice, seconds), voices (note names, so it can be opened again), romans, style, key, level, tags,
+   prompt, bpm }. done(true, { sketch, voices, problems }) */
+Tasks.partWrite = (el, p, done) => {
+  const id = 'pw-name-' + (++pwUid), sv = p.save || {}, need = p.need || 'no-errors';
+  let saved = false, pw = null;
+  el.innerHTML = `<div class="nt-task">${p.prompt ? `<p class="prompt">${p.prompt}</p>` : ''}<div class="pw-slot"></div><ul class="nt-checks"></ul>
+    <div class="field"><label for="${id}">Name it</label><input id="${id}" type="text" maxlength="40" placeholder="${esc(p.placeholder || 'Give it a name')}" value="${esc(p.name || '')}"></div>
+    <div class="row"><button type="button" class="btn primary" data-act="save" disabled>Save to sketchbook</button></div><p class="fb info pw-saved" aria-live="polite"></p></div>`;
+  const checks = el.querySelector('.nt-checks'), bSave = el.querySelector('[data-act="save"]'), name = el.querySelector('#' + id), f = el.querySelector('.pw-saved');
+  function refresh() {
+    if (!pw) return;
+    const pr = pw.progress, sum = VoiceLead.summary(pw.problems), full = pr.have >= pr.need;
+    checks.innerHTML = `<li class="${full ? 'ok' : ''}">${full ? '✓' : '○'} Every note written (${pr.have} of ${pr.need})</li>`
+      + (need === 'no-errors' ? `<li class="${sum.errors ? '' : 'ok'}">${sum.errors ? `○ ${sum.errors} error${sum.errors === 1 ? '' : 's'} to fix` : '✓ No errors'}${sum.warnings ? ` (${sum.warnings} warning${sum.warnings === 1 ? '' : 's'}: allowed)` : ''}</li>` : '');
+    bSave.disabled = saved || !full || (need === 'no-errors' && sum.errors > 0);
+  }
+  pw = PartWriter.mount(el.querySelector('.pw-slot'), Object.assign({}, p, { onChange: () => { saved = false; f.textContent = ''; refresh(); } }));
+  refresh();
+  bSave.onclick = () => {
+    const voices = pw.voices, problems = pw.problems, key = Theory.stripOct(p.key || 'C'), mode = p.mode === 'minor' ? 'minor' : 'major';
+    const sketch = saveSketch(Object.assign({
+      name: name.value.trim() || p.name || (voices.length === 4 ? 'Four voices ' : 'Two voices ') + (Store.data.sketches.length + 1),
+      notes: pw.notes, voices, romans: p.romans || null, style: p.style || null, key: Theory.keyName(key, mode),
+      level: sv.level, tags: sv.tags || [], from: sv.from, prompt: sv.prompt || p.prompt || '', bpm: Math.round(60 / pw.secPerCol)
+    }, sv.extra || {}));
+    saved = true; bSave.disabled = true;
+    fb(f, 'good', `Saved “${sketch.name}” to your sketchbook.`);
+    done(true, { sketch, voices, problems });
+  };
+  return () => pw.destroy();
+};
+
+/* Find the errors: a realization with planted mistakes. Tap a note that breaks a rule (or, with name: true, tap it and
+   then name the rule). Done when every planted error is found; with fix: true the score then opens in the editor and is
+   done once nothing is an error.
+   p: { romans, key, mode, errors: ['parallel5', 'doubledLT', …], voices (a correct version to plant them in; default a
+        realization of the numerals), prompt, name, fix, random }
+   done(true, { found, misses, planted }) */
+Tasks.findErrors = (el, p, done) => {
+  const key = Theory.stripOct(p.key || 'C'), mode = p.mode === 'minor' ? 'minor' : 'major', romans = p.romans || null;
+  const opts = { key, mode, romans, style: p.style || 'chorale', random: p.random };
+  let res = vlPlant(p.voices || null, p.errors || ['parallel5'], opts);
+  if (!res) {
+    /* keep the errors that fit this progression */
+    const kept = [];
+    (p.errors || []).forEach(r => { if (vlPlant(p.voices || null, kept.concat([r]), opts)) kept.push(r); });
+    res = kept.length ? vlPlant(p.voices || null, kept, opts) : null;
+  }
+  if (!res) { el.innerHTML = '<p class="fb info">This progression has no room for those errors.</p>'; done(true, { found: 0, misses: 0, planted: [] }); return () => {}; }
+  const voices = res.voices, planted = res.planted, n = voices.length, cols = voices[0].length;
+  const found = new Set(), okCells = new Set();
+  let misses = 0, sel = { col: 0, voice: 0 }, naming = null, inner = null, finished = false, fixed = false;
+  el.innerHTML = `<div class="nt-task">${p.prompt ? `<p class="prompt">${p.prompt}</p>` : `<p class="prompt">${planted.length === 1 ? 'One note breaks a rule' : planted.length + ' things break the rules'}. Tap ${planted.length === 1 ? 'it' : 'a note in each one'}.</p>`}
+    <div class="row"><span class="chip live">${esc(Theory.keyName(key, mode))}</span><button type="button" class="btn small" data-act="play">▶ Play it</button><span class="chip" data-count></span></div>
+    <div class="vv-box pw-score fe-score" tabindex="0" role="group" aria-label="The score. Click a note that breaks a rule, or move with the arrow keys and press Enter."></div>
+    <div class="fe-names" hidden></div>
+    <p class="fb info fe-fb" aria-live="polite">Listen first, then look at how each voice moves.</p>
+    <ul class="fe-found"></ul><div class="fe-fix"></div></div>`;
+  const $ = s => el.querySelector(s), box = $('.fe-score'), f = $('.fe-fb'), cnt = $('[data-count]'), namesEl = $('.fe-names'), list = $('.fe-found');
+  function render() {
+    const marks = [];
+    planted.forEach((pl, i) => { if (found.has(i)) pl.voices.forEach(v => pl.cols.forEach(c => marks.push({ col: c, voice: v, kind: 'found' }))); });
+    okCells.forEach(k => { const [c, v] = k.split(':').map(Number); marks.push({ col: c, voice: v, kind: 'ok' }); });
+    const lines = [];
+    planted.forEach((pl, i) => { if (found.has(i) && pl.cols.length === 2 && /^(parallel|contrary|direct)/.test(pl.rule)) pl.voices.forEach(v => lines.push({ from: { col: pl.cols[0], voice: v }, to: { col: pl.cols[1], voice: v }, kind: 'found' })); });
+    box.innerHTML = vvSvg({ voices, key, mode, labels: romans, marks, lines, sel: finished ? null : sel, editable: true, style: opts.style });
+    cnt.textContent = `${found.size} of ${planted.length} found`;
+  }
+  const at = (c, v) => planted.findIndex((pl, i) => !found.has(i) && pl.cols.indexOf(c) >= 0 && (pl.voices.indexOf(v) >= 0 || (pl.also || []).some(a => a.cols.indexOf(c) >= 0 && a.voices.indexOf(v) >= 0)));
+  function markFound(i) {
+    found.add(i); naming = null; namesEl.hidden = true;
+    const pl = planted[i];
+    list.insertAdjacentHTML('beforeend', `<li><b>${esc(VL_RULES[pl.rule].name)}.</b> ${esc(pl.text)}</li>`);
+    fb(f, 'good', found.size < planted.length ? `Found one. ${planted.length - found.size} to go.` : 'All found.');
+    render();
+    if (found.size === planted.length) finish();
+  }
+  function finish() {
+    finished = true; render();
+    if (!p.fix) { done(true, { found: found.size, misses, planted }); return; }
+    fb(f, 'info', 'Now fix them: change the notes until no errors are left.');
+    const fixEl = $('.fe-fix');
+    inner = PartWriter.mount(fixEl, { voices: n, key, mode, romans, style: opts.style, initial: voices, cols, onChange: (vs, ps) => {
+      if (!VoiceLead.summary(ps).errors && !fixed) { fixed = true; fb(f, 'good', 'Fixed: no errors left.'); done(true, { found: found.size, misses, planted, voices: vs }); }
+    } });
+  }
+  function tapCell(c, v) {
+    if (finished || naming != null) return;
+    sel = { col: c, voice: v };
+    const i = at(c, v);
+    if (i < 0) {
+      misses++;
+      okCells.add(c + ':' + v);
+      const left = planted.filter((pl, j) => !found.has(j));
+      fb(f, 'bad', `That ${n === 4 ? VV_NAMES4[v].toLowerCase() + ' note' : 'note'} is fine.${misses >= 3 && left.length ? ` Hint: look at beat ${left[0].cols[0] + 1}.` : ''}`);
+      render(); return;
+    }
+    if (!p.name) { markFound(i); return; }
+    /* name it: the planted rules plus a few others */
+    const pool = Object.keys(VL_RULES).filter(r => ['consonance', 'passing', 'startPerfect', 'endPerfect', 'cadence', 'repeated', 'steps', 'suspPrep', 'suspResolve', 'suspType'].indexOf(r) < 0);
+    const choices = shuffle([planted[i].rule].concat(shuffle(pool.filter(r => r !== planted[i].rule)).slice(0, 3)));
+    naming = i;
+    namesEl.hidden = false;
+    namesEl.innerHTML = `<p class="lead" style="flex-basis:100%">Which rule does it break?</p>` + choices.map(r => `<button type="button" class="choice" data-r="${r}">${esc(VL_RULES[r].name)}</button>`).join('');
+    render();
+  }
+  namesEl.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-r]'); if (!b || naming == null) return;
+    if (b.dataset.r === planted[naming].rule) markFound(naming);
+    else { misses++; b.classList.add('wrong'); b.disabled = true; fb(f, 'bad', `Not ${VL_RULES[b.dataset.r].name.toLowerCase()}. Look again at what these notes do.`); }
+  });
+  box.addEventListener('click', ev => { const t = ev.target.closest && ev.target.closest('[data-col][data-voice]'); if (t) tapCell(+t.getAttribute('data-col'), +t.getAttribute('data-voice')); });
+  box.addEventListener('keydown', ev => {
+    const k = ev.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') sel = { col: Math.max(0, Math.min(cols - 1, sel.col + (k === 'ArrowLeft' ? -1 : 1))), voice: sel.voice };
+    else if (k === 'ArrowUp' || k === 'ArrowDown') sel = { col: sel.col, voice: Math.max(0, Math.min(n - 1, sel.voice + (k === 'ArrowUp' ? -1 : 1))) };
+    else if (k === 'Enter' || k === ' ') { tapCell(sel.col, sel.voice); ev.preventDefault(); ev.stopPropagation(); return; }
+    else return;
+    ev.preventDefault(); ev.stopPropagation(); render();
+  });
+  $('[data-act="play"]').onclick = () => {
+    const sec = 1; Sound.seq([].concat(...voices.map((row, k) => row.map((x, c) => x ? { m: Theory.midi(x), t: c * sec, d: sec * 0.94, v: k === 0 || k === n - 1 ? 0.7 : 0.5 } : null).filter(Boolean))));
+  };
+  render();
+  return () => { if (inner) inner.destroy(); };
+};
