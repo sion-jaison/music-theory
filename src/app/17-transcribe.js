@@ -407,7 +407,7 @@ function trMount(el, o) {
   const $ = s => el.querySelector(`[data-tr="${s}"]`);
   const work = el.querySelector('.tr-work'), status = $('status'), strip = $('strip'), pickEl = $('pick'), canvas = $('wave').querySelector('canvas');
   let clip = null, player = null, segs = [], key = null, sel = -1, cand = null, loop = null, peaks = null, raf = 0, alive = true, token = 0, saved = false;
-  let wasPlaying = false, liveTrack = null, liveDb = null, liveAn = null, nowSym = null, lastLive = 0, drag = null;
+  let wasPlaying = false, drawnW = -1, liveTrack = null, liveDb = null, liveAn = null, nowSym = null, lastLive = 0, drag = null;
   ChordIn.start();
   const say = (kind, text) => fb(status, kind, text);
   const confirmed = () => segs.filter(s => s.ok).sort((a, b) => a.t - b.t);
@@ -432,7 +432,7 @@ function trMount(el, o) {
         if (!alive || my !== token) return;
         const sp = trSpell(trSmooth(frames, { hop: 0.2, minDur: 0.8, grid: clip.grid, offset: clip.offset }));
         segs = sp.segments; key = sp.key;
-        say(segs.length ? 'info' : 'warn', segs.length ? `${segs.length} chord${segs.length === 1 ? '' : 's'} suggested${key ? `, probably in ${key.name}` : ''}. Pick one, listen, and confirm it by playing it.` : 'No clear chords found. Loop a passage and play along to find them by ear.');
+        say(segs.length ? 'info' : 'warn', segs.length ? `${segs.length} chord${segs.length === 1 ? '' : 's'} suggested${key ? `, probably in ${key.name}` : ''}. Pick one, listen, and confirm it by playing it.` : 'No clear chords found. Loop a passage, then use Add a chord here and play what you hear.');
         if (segs.length) select(0, true);
         paint();
       });
@@ -504,6 +504,7 @@ function trMount(el, o) {
   function draw() {
     if (!clip || !canvas.getContext) return;
     const w = canvas.clientWidth || 0, h = canvas.clientHeight || 72, dpr = window.devicePixelRatio || 1;
+    drawnW = w;
     if (!w) return;
     if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); peaks = null; }
     if (!peaks) peaks = trPeaks(clip.samples, Math.max(1, Math.floor(w)));
@@ -541,7 +542,8 @@ function trMount(el, o) {
       if (u.on) nowSym = trSym(u.on).sym; else if (u.off) nowSym = null;
       $('now').textContent = nowSym ? '· hearing ' + Theory.pretty(nowSym) + ' now' : '';
     }
-    if (player.playing) draw();
+    /* redraw while playing, and once the canvas has a width (it has none until the panel is laid out) */
+    if (player.playing || (canvas.clientWidth || 0) !== drawnW) draw();
   }
   /* ----- input: the learner plays the chord ----- */
   const offChord = Bus.on('chord', ev => {

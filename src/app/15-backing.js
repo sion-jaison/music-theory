@@ -8,7 +8,8 @@
    Backing.render(o) → Promise<AudioBuffer> the same band rendered offline (the Transcribe practice track)
    Backing.STYLES, Backing.STYLE_IDS      metadata: { id, name, desc, meter, bpm, swing }
 
-   o: { style ('pop'), chords, key ('C'), mode ('major'), bpm (the style's), meter (the style's), loop (true), bars,
+   o: { style ('pop'), chords, key ('C'), mode ('major'), beats (each chord's length when the list gives none: one bar),
+        bpm (the style's), meter (the style's), loop (true), bars,
         countIn (bars of clicks first), melody, mute: { drums, bass, chords, melody }, voicing ('quartal' for the main
         comping part), voices (how many notes in each chord: 3 for plain triads), swing (overrides the style's), gate (false: the mic keeps listening), onChord(i, chord),
         onBar(n), onBeat(b), onCount(n), onStart, onStop, onEnd }
