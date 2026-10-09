@@ -21,5 +21,5 @@ window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keybo
 /* intermediate song craft */
 Object.assign(window.Motif, { ChordSheet, SheetHas, csPlay, addListeningMap, LISTENING_MAPS, listeningThisWeek, listeningOpen, weekKey, projectOf, sketchById, levelUnlocked });
 /* voices: the voice-leading checker, multi-voice notation, the part-writing editor */
-Object.assign(window.Motif, { VoiceLead });
+Object.assign(window.Motif, { VoiceLead, VoiceView });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

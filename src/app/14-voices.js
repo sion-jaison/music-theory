@@ -777,3 +777,253 @@ const VoiceLead = {
   ruleName: id => (VL_RULES[id] || { name: id }).name,
   summary: ps => ({ errors: ps.filter(p => p.severity === 'error').length, warnings: ps.filter(p => p.severity === 'warn').length })
 };
+
+/* =================================================================
+   VoiceView: several voices in notation
+   VoiceView.svg({ voices, staves: 'grand' | 'single' | 'two', clef (for 'single'), clefs ([top, bottom] for 'two'),
+     key, mode or keySig, labels (under the bass: Roman numerals with figures, e.g. 'V65', 'I64', 'V7/V'),
+     marks: [{ col, voice, kind: 'error' | 'warn' | 'ok' | 'found' | 'hint' }],
+     lines: [{ from: { col, voice }, to: { col, voice }, kind }] (e.g. two voices moving in parallel 5ths),
+     sel: { col, voice }, durations ('w' | 'h' | 'q', one per column, or one array per voice), style (sets the defaults:
+     chorale half notes, species1 whole notes, species2 and 4 halves against a whole-note cantus), held ([voices whose
+     nulls continue the note before], default the cantus in species 2 and 4), cantus, barCols (columns per bar), ties
+     (tie a note into the same note at the start of a bar: species 4), editable (a hit area per cell with data-col and
+     data-voice), placeholders (true: dashed heads in every empty editable cell; or a list of { col, voice }), fixed
+     ([given voices], drawn quieter), playing (a column to light up),
+     names, aria }) → SVG string
+   Two voices on one staff share it: the upper voice's stems go up, the lower voice's down. Default staves: four voices on
+   a grand staff (soprano and alto above, tenor and bass below); two voices on one staff when they both fit it, else
+   on a grand staff.
+   ================================================================= */
+const VV_NAMES4 = ['Soprano', 'Alto', 'Tenor', 'Bass'];
+/* the clef that suits a set of MIDI notes */
+function vvClefFor(ms) {
+  if (!ms.length) return 'treble';
+  const lo = Math.min(...ms), hi = Math.max(...ms);
+  if (lo >= 57) return 'treble';
+  if (hi <= 64) return 'bass';
+  return (lo + hi) / 2 >= 60 ? 'treble' : 'bass';
+}
+/* a Roman numeral with its figures: main text, then the figure (one number up high, two stacked), then any '/V' */
+function vvLabel(x, y, text) {
+  const m = /^([^/]*?)(64|65|43|42|7|6|2)?(\/.*)?$/.exec(String(text)) || [null, String(text)];
+  const main = vlPrettyRoman(m[1] || ''), fig = m[2] || '', tail = m[3] ? vlPrettyRoman(m[3]) : '';
+  /* tspans let the browser measure: a stacked figure steps back by one figure's width (10 px monospace) */
+  let s = esc(main);
+  if (fig.length === 1) s += `<tspan class="vv-fig" dy="-7">${fig}</tspan>${tail ? `<tspan dy="7">${esc(tail)}</tspan>` : ''}`;
+  else if (fig) s += `<tspan class="vv-fig" dy="-8">${fig[0]}</tspan><tspan class="vv-fig" dx="-6" dy="10">${fig[1]}</tspan>${tail ? `<tspan dy="-2">${esc(tail)}</tspan>` : ''}`;
+  else s += esc(tail);
+  return `<text class="vv-lab" x="${ntN(x)}" y="${ntN(y)}" text-anchor="middle">${s}</text>`;
+}
+function vvSvg(o) {
+  o = o || {};
+  const raw = o.voices || [], n = raw.length, cols = raw.reduce((x, v) => Math.max(x, (v || []).length), 0);
+  const key = Theory.stripOct(o.key || 'C'), mode = o.mode === 'minor' ? 'minor' : 'major';
+  const ks = o.keySig != null ? o.keySig : o.key ? Theory.keySig(key, mode).n : 0, nAcc = Math.abs(ks);
+  const style = o.style || (n >= 3 ? 'chorale' : 'free'), sp = /^species/.test(style) ? +style.slice(7) || 1 : 0;
+  const N = raw.map(v => Array.from({ length: cols }, (_, c) => vlNote((v || [])[c], key, mode)));
+  const cantus = o.cantus != null ? o.cantus : sp ? n - 1 : null;
+  const held = new Set(o.held || (sp === 2 || sp === 4 ? [cantus] : []));
+  const fixed = new Set(o.fixed || []);
+  const barCols = o.barCols || (sp === 1 ? 1 : 2);
+  /* durations per voice and column */
+  const D = raw.map((v, k) => Array.from({ length: cols }, (_, c) => {
+    const d = o.durations;
+    if (Array.isArray(d)) { const x = Array.isArray(d[k]) ? d[k][c] : d[c]; if (x) return x; }
+    else if (typeof d === 'string') return held.has(k) ? 'w' : d;
+    if (held.has(k)) return 'w';
+    /* species 2 and 4: a note alone in the last bar fills it */
+    if ((sp === 2 || sp === 4) && c % barCols === 0 && c + barCols >= cols && !(v || []).slice(c + 1).some(x => x != null)) return 'w';
+    return sp === 1 ? 'w' : 'h';
+  }));
+  /* staves */
+  const all = [].concat(...N.map(v => v.filter(Boolean).map(x => x.m)));
+  let kind = o.staves;
+  if (!kind) {
+    if (n !== 2) kind = 'grand';
+    else { const c = vvClefFor(all), lo = Math.min(...all.concat([60])), hi = Math.max(...all.concat([60])); kind = (c === 'treble' ? lo >= 55 : hi <= 67) ? 'single' : 'grand'; }
+  }
+  let staffs;
+  if (kind === 'single') staffs = [{ clef: o.clef || vvClefFor(all), vs: raw.map((v, k) => k) }];
+  else {
+    const split = Math.ceil(n / 2), groups = [raw.map((v, k) => k).slice(0, split), raw.map((v, k) => k).slice(split)];
+    const clefs = o.clefs || (kind === 'grand' ? ['treble', 'bass'] : groups.map(g => vvClefFor([].concat(...g.map(k => N[k].filter(Boolean).map(x => x.m))))));
+    staffs = groups.map((g, i) => ({ clef: clefs[i], vs: g }));
+  }
+  const staffOf = [];
+  staffs.forEach((s, i) => { s.CL = NT_CLEFS[s.clef] || NT_CLEFS.treble; s.vs.forEach(k => { staffOf[k] = i; }); });
+  const ext = (s, st) => 4 * NT_GAP - (st - s.CL.bottom) * NT_HALF;   /* y of a staff step, relative to the staff's top line */
+  /* a default step for an empty cell: the voice's nearest written note, else the middle of its range */
+  const DEF = n === 4 ? [35, 31, 25, 20] : null;
+  function ghostStep(k, c) {
+    for (let d = 1; d < cols; d++) { const a = N[k][c - d], b = N[k][c + d]; if (a) return a.step; if (b) return b.step; }
+    if (DEF) return DEF[k];
+    const s = staffs[staffOf[k]];
+    return s.CL.bottom + (s.vs.length > 1 && s.vs.indexOf(k) === 0 ? 6 : s.vs.length > 1 ? 2 : 4);
+  }
+  /* what is drawn in each cell */
+  const editable = new Set(o.editable ? raw.map((v, k) => k).filter(k => !fixed.has(k)) : []);
+  const marks = {}; (o.marks || []).forEach(mk => { marks[mk.col + ':' + mk.voice] = mk.kind || 'error'; });
+  const cells = [];
+  for (let c = 0; c < cols; c++) {
+    cells[c] = [];
+    for (let k = 0; k < n; k++) {
+      const x = N[k][c];
+      const cont = !x && held.has(k) && N[k].slice(0, c).some(Boolean);
+      const isSel = o.sel && o.sel.col === c && o.sel.voice === k;
+      const ph = Array.isArray(o.placeholders) ? o.placeholders.some(p => p.col === c && p.voice === k) : o.placeholders && editable.has(k);
+      if (x) cells[c].push({ k, x, step: x.step, d: D[k][c] });
+      else if (!cont && (isSel || ph)) cells[c].push({ k, ghost: true, step: ghostStep(k, c), d: 'h', sel: isSel });
+    }
+  }
+  /* stems, collisions and accidentals, per staff and column */
+  const state = staffs.map(() => new Map());
+  const keyAcc = {}; (ks > 0 ? Theory.ORDER_SHARPS : Theory.ORDER_FLATS).slice(0, nAcc).forEach(l => { keyAcc[l] = ks > 0 ? 1 : -1; });
+  const lead = [], tail = [];
+  for (let c = 0; c < cols; c++) {
+    if (c % barCols === 0) state.forEach(m => m.clear());
+    let L = 13, T = 13;
+    staffs.forEach((s, si) => {
+      const here = cells[c].filter(e => staffOf[e.k] === si);
+      const multi = s.vs.length > 1;
+      here.forEach(e => {
+        const rank = s.vs.indexOf(e.k);
+        e.si = si;
+        e.up = multi ? rank < s.vs.length / 2 : e.step < s.CL.bottom + 4;
+        e.shift = 0;
+        if (e.ghost) return;
+        const q = Theory.parse(e.x.name), cur = state[si].has(e.step) ? state[si].get(e.step) : (keyAcc[Theory.LETTERS[q.L]] || 0);
+        if (q.acc !== cur) e.acc = NT_ACC[q.acc] || '';
+        state[si].set(e.step, q.acc);
+      });
+      /* a 2nd or a unison between neighbouring voices: the upper voice's head moves right (a unison of equal notes shares one head) */
+      const real = here.filter(e => !e.ghost).sort((a, b) => a.k - b.k);
+      for (let i = 0; i + 1 < real.length; i++) {
+        const a = real[i], b = real[i + 1], gap = a.step - b.step;
+        if (gap === 0 && a.x.m === b.x.m && a.d === b.d && a.d !== 'w' && a.up !== b.up) b.shared = true;
+        else if (gap <= 1) { a.shift = 12; T = Math.max(T, 25); }
+      }
+      const accs = here.filter(e => e.acc).sort((a, b) => b.step - a.step);
+      let lastStep = null, col = 0;
+      accs.forEach(e => { col = lastStep != null && lastStep - e.step < 6 ? col + 1 : 0; e.accX = -15 - col * 10; lastStep = e.step; L = Math.max(L, 25 + col * 10); });
+    });
+    lead.push(L); tail.push(T);
+  }
+  const xKey = 44, xNotes = xKey + nAcc * 11 + (nAcc ? 6 : 0) + 10;
+  const X = [], barX = [];
+  let cx = xNotes;
+  for (let c = 0; c < cols; c++) {
+    X[c] = cx + lead[c];
+    if (c > 0) X[c] = Math.max(X[c], X[c - 1] + 40);
+    cx = X[c] + tail[c];
+    if ((c + 1) % barCols === 0 && c + 1 < cols) { barX.push(cx + 4); cx += 10; }
+  }
+  const W = Math.max(o.minWidth || 0, Math.ceil(cx + 16));
+  /* vertical room for each staff: heads, ledger lines and stems */
+  const STEM = 34;
+  staffs.forEach((s, si) => {
+    let top = -14, bot = 54;
+    for (let c = 0; c < cols; c++) cells[c].forEach(e => {
+      if (e.si !== si) return;
+      const y = ext(s, e.step);
+      top = Math.min(top, y - 10, e.d !== 'w' && e.up && !e.ghost ? y - STEM - 2 : 0);
+      bot = Math.max(bot, y + 10, e.d !== 'w' && !e.up && !e.ghost ? y + STEM + 2 : 0);
+    });
+    if (s.CL.cclef) top = Math.min(top, ext(s, 28) - 22);
+    s.top = top; s.bot = bot;
+  });
+  let y = 8 - staffs[0].top;
+  staffs.forEach((s, si) => { if (si) y += Math.max(staffs[si - 1].bot + 8, 0) - s.top + 10; s.Y = y; });
+  const last = staffs[staffs.length - 1];
+  const hasLabels = o.labels && o.labels.some(l => l != null && l !== '');
+  const labelsY = last.Y + Math.max(last.bot, 50) + 16;
+  const H = Math.ceil(hasLabels ? labelsY + 14 : last.Y + last.bot + 8);
+  const yAt = e => staffs[e.si].Y + ext(staffs[e.si], e.step);
+  /* drawing */
+  let staffSvg = '', bg = '', notes = '', over = '', hits = '';
+  staffs.forEach(s => {
+    for (let i = 0; i < 5; i++) staffSvg += `<line class="vv-sl" x1="4" x2="${W - 4}" y1="${s.Y + i * NT_GAP}" y2="${s.Y + i * NT_GAP}"/>`;
+    staffSvg += s.CL.cclef ? ntCClef(9, s.Y + ext(s, 28)) : `<text class="vv-clef" x="8" y="${s.Y + s.CL.dy}" font-size="${s.CL.size}">${s.CL.glyph}</text>`;
+    const list = ks > 0 ? s.CL.sharps : s.CL.flats;
+    for (let i = 0; i < nAcc; i++) staffSvg += `<text class="vv-acc" x="${xKey + i * 11}" y="${s.Y + ext(s, Staff.step(list[i])) + 5}" text-anchor="middle">${ks > 0 ? '♯' : '♭'}</text>`;
+  });
+  const sysTop = staffs[0].Y, sysBot = last.Y + 4 * NT_GAP;
+  if (staffs.length > 1) staffSvg += `<line class="vv-bar" x1="4" x2="4" y1="${sysTop}" y2="${sysBot}"/>`;
+  const barLine = x => staffs.length > 1 && kind !== 'two'
+    ? `<line class="vv-bar" x1="${ntN(x)}" x2="${ntN(x)}" y1="${sysTop}" y2="${sysBot}"/>`
+    : staffs.map(s => `<line class="vv-bar" x1="${ntN(x)}" x2="${ntN(x)}" y1="${s.Y}" y2="${s.Y + 4 * NT_GAP}"/>`).join('');
+  barX.forEach(x => { staffSvg += barLine(x); });
+  staffSvg += barLine(W - 10) + (staffs.length > 1 && kind !== 'two' ? `<rect class="vv-bar-end" x="${W - 7.5}" y="${sysTop}" width="4" height="${sysBot - sysTop}"/>` : staffs.map(s => `<rect class="vv-bar-end" x="${W - 7.5}" y="${s.Y}" width="4" height="${4 * NT_GAP}"/>`).join(''));
+  const pos = {};
+  for (let c = 0; c < cols; c++) {
+    let g = '';
+    cells[c].forEach(e => {
+      const s = staffs[e.si], yy = yAt(e), x = X[c] + e.shift;
+      pos[c + ':' + e.k] = { x, y: yy };
+      const isSel = o.sel && o.sel.col === c && o.sel.voice === e.k;
+      if (isSel) bg += `<rect class="vv-selbg" x="${ntN(X[c] - 15 + Math.min(0, e.accX || 0) + (e.acc ? 4 : 0))}" y="${ntN(s.Y - 12)}" width="${ntN(30 + e.shift + (e.acc ? -(e.accX || 0) - 4 : 0))}" height="${4 * NT_GAP + 24}" rx="6"/>`;
+      if (e.ghost) { g += `<ellipse class="vv-ph${isSel ? ' sel' : ''}" cx="${ntN(x)}" cy="${ntN(yy)}" rx="6.4" ry="4.6" transform="rotate(-20 ${ntN(x)} ${ntN(yy)})"/>`; return; }
+      const mk = marks[c + ':' + e.k];
+      const cls = ['vv-n', 'vv-v' + e.k];
+      if (mk) cls.push('vv-' + mk);
+      if (isSel) cls.push('vv-sel');
+      if (fixed.has(e.k)) cls.push('vv-fixed');
+      let s2 = '';
+      const top = s.CL.bottom + 8;
+      for (let st = top + 2; st <= e.step; st += 2) s2 += `<line class="vv-ledger" x1="${ntN(x - 10)}" x2="${ntN(x + 10)}" y1="${ntN(s.Y + ext(s, st))}" y2="${ntN(s.Y + ext(s, st))}"/>`;
+      for (let st = s.CL.bottom - 2; st >= e.step; st -= 2) s2 += `<line class="vv-ledger" x1="${ntN(x - 10)}" x2="${ntN(x + 10)}" y1="${ntN(s.Y + ext(s, st))}" y2="${ntN(s.Y + ext(s, st))}"/>`;
+      if (e.acc) s2 += `<text class="vv-acc" x="${ntN(X[c] + e.accX)}" y="${ntN(yy + 5)}" text-anchor="middle">${e.acc}</text>`;
+      if (!e.shared) s2 += ntHead(x, yy, e.d);
+      if (mk === 'error' || mk === 'warn' || mk === 'found') s2 += `<circle class="vv-ring vv-ring-${mk}" cx="${ntN(x)}" cy="${ntN(yy)}" r="10"/>`;
+      if (e.d !== 'w') {
+        const hx = e.shared ? X[c] : x;
+        s2 += e.up ? `<line class="vv-stem" x1="${ntN(hx + 5.6)}" x2="${ntN(hx + 5.6)}" y1="${ntN(yy - 1)}" y2="${ntN(yy - STEM)}"/>` : `<line class="vv-stem" x1="${ntN(hx - 5.6)}" x2="${ntN(hx - 5.6)}" y1="${ntN(yy + 1)}" y2="${ntN(yy + STEM)}"/>`;
+      }
+      g += `<g class="${cls.join(' ')}" data-col="${c}" data-voice="${e.k}">${s2}</g>`;
+    });
+    notes += `<g class="vv-col${o.playing === c ? ' vv-now' : ''}" data-c="${c}">${g}</g>`;
+  }
+  /* ties: a note held into the same note at the start of the next bar */
+  if (o.ties || sp === 4) {
+    for (let c = 1; c < cols; c++) {
+      if (c % barCols !== 0) continue;
+      for (let k = 0; k < n; k++) {
+        const a = N[k][c - 1], b = N[k][c];
+        if (!a || !b || a.m !== b.m || held.has(k)) continue;
+        const p = pos[(c - 1) + ':' + k], q = pos[c + ':' + k];
+        const e = cells[c].find(z => z.k === k), sg = e && e.up ? 1 : -1;
+        const x1 = p.x + 7, x2 = q.x - 7, yy = p.y + sg * 6, mx = (x1 + x2) / 2, h = sg * Math.min(9, 4 + (x2 - x1) * 0.05);
+        over += `<path class="vv-tie" d="M${ntN(x1)} ${ntN(yy)}Q${ntN(mx)} ${ntN(yy + 2 * h)} ${ntN(x2)} ${ntN(yy)}Q${ntN(mx)} ${ntN(yy + 2 * h - sg * 2.6)} ${ntN(x1)} ${ntN(yy)}Z"/>`;
+      }
+    }
+  }
+  /* lines between notes (parallels, motion) */
+  (o.lines || []).forEach(l => {
+    const p = pos[l.from.col + ':' + l.from.voice], q = pos[l.to.col + ':' + l.to.voice];
+    if (!p || !q) return;
+    const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1, cut = 8;
+    over += `<line class="vv-line ${l.kind || 'error'}" x1="${ntN(p.x + dx / len * cut)}" y1="${ntN(p.y + dy / len * cut)}" x2="${ntN(q.x - dx / len * cut)}" y2="${ntN(q.y - dy / len * cut)}"/>`;
+  });
+  /* labels under the bass */
+  let labs = '';
+  if (hasLabels) o.labels.forEach((l, c) => { if (l != null && l !== '' && X[c] != null) labs += vvLabel(X[c], labelsY, l); });
+  /* hit areas: each column split between the voices of each staff at the midpoints of their notes */
+  if (o.editable) {
+    for (let c = 0; c < cols; c++) {
+      const xl = c ? (X[c - 1] + X[c]) / 2 : X[c] - 22, xr = c + 1 < cols ? (X[c] + X[c + 1]) / 2 : X[c] + 22;
+      staffs.forEach((s, si) => {
+        const ys = s.vs.map(k => { const e = cells[c].find(z => z.k === k); return s.Y + ext(s, e ? e.step : ghostStep(k, c)); });
+        s.vs.forEach((k, i) => {
+          const y0 = i === 0 ? s.Y + s.top : (ys[i - 1] + ys[i]) / 2, y1 = i === s.vs.length - 1 ? s.Y + s.bot : (ys[i] + ys[i + 1]) / 2;
+          hits += `<rect class="vv-hit" data-col="${c}" data-voice="${k}" x="${ntN(xl)}" y="${ntN(Math.min(y0, y1))}" width="${ntN(xr - xl)}" height="${ntN(Math.max(4, Math.abs(y1 - y0)))}"/>`;
+        });
+      });
+    }
+  }
+  const names = o.names || (n === 4 ? VV_NAMES4 : n === 2 ? (sp ? (cantus === 0 ? ['Cantus', 'Counterpoint'] : ['Counterpoint', 'Cantus']) : ['Upper voice', 'Lower voice']) : raw.map((v, k) => 'Voice ' + (k + 1)));
+  const aria = o.aria || `${n === 4 ? 'Four' : n === 2 ? 'Two' : n} voices, ${cols} ${n >= 3 ? 'chord' : 'note'}${cols === 1 ? '' : 's'}${o.key ? ' in ' + Theory.keyName(key, mode) : ''}. `
+    + N.map((v, k) => `${vlCap(names[k])}: ${v.map((x, c) => x ? Theory.pretty(x.name) : held.has(k) && v.slice(0, c).some(Boolean) ? 'held' : 'blank').join(', ')}.`).join(' ')
+    + (hasLabels ? ` Numerals: ${o.labels.map(l => l ? vlPrettyRoman(l) : 'none').join(', ')}.` : '');
+  return `<svg class="vv" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(aria)}">${bg}${staffSvg}${notes}${over}${labs}${hits}</svg>`;
+}
+const VoiceView = { svg: vvSvg, clefFor: vvClefFor };

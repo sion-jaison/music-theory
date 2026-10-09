@@ -397,14 +397,22 @@ function ntFromNotes(notes, o) {
 }
 
 /* ---------- engraving ----------
-   One staff line (perc) or five (treble, bass), with the clef, key and time metrics of Staff (11-components.js).
+   One staff line (perc) or five (treble, bass, alto, tenor), with the clef, key and time metrics of Staff (11-components.js).
    Every event is drawn as given (call normalize first for conventional spelling), except that an event crossing a
    bar line is re-written with a tie. Staff space = 10 px; the top line (or the single line) is at y = 0. */
 const NT_GAP = 10, NT_HALF = 5;
 const NT_CLEFS = {
   treble: { bottom: 30, glyph: '𝄞', size: 40.6, dy: 40.5, sharps: ['F5', 'C5', 'G5', 'D5', 'A4', 'E5', 'B4'], flats: ['B4', 'E5', 'A4', 'D5', 'G4', 'C5', 'F4'] },
-  bass: { bottom: 18, glyph: '𝄢', size: 45.4, dy: 40.4, sharps: ['F3', 'C3', 'G3', 'D3', 'A2', 'E3', 'B2'], flats: ['B2', 'E3', 'A2', 'D3', 'G2', 'C3', 'F2'] }
+  bass: { bottom: 18, glyph: '𝄢', size: 45.4, dy: 40.4, sharps: ['F3', 'C3', 'G3', 'D3', 'A2', 'E3', 'B2'], flats: ['B2', 'E3', 'A2', 'D3', 'G2', 'C3', 'F2'] },
+  /* C clefs mark middle C: on the middle line (alto: viola) or the 4th line (tenor: cello, bassoon and trombone high parts) */
+  alto: { bottom: 24, cclef: true, sharps: ['F4', 'C4', 'G4', 'D4', 'A3', 'E4', 'B3'], flats: ['B3', 'E4', 'A3', 'D4', 'G3', 'C4', 'F3'] },
+  tenor: { bottom: 22, cclef: true, sharps: ['F3', 'C4', 'G3', 'D4', 'A3', 'E4', 'B3'], flats: ['B3', 'E4', 'A3', 'D4', 'G3', 'C4', 'F3'] }
 };
+/* the C clef, drawn (not a font glyph): two bars and two lobes meeting on the line of middle C at y = yc */
+function ntCClef(x, yc) {
+  const X = v => ntN(x + v), lobe = s => { const Y = v => ntN(yc + s * v); return `<path class="nt-cclef-l" d="M${X(8.6)} ${Y(1.2)}L${X(11.2)} ${Y(6.4)}Q${X(13.2)} ${Y(8.4)} ${X(16.4)} ${Y(7.8)}C${X(21.2)} ${Y(7.2)} ${X(22.4)} ${Y(10.6)} ${X(22)} ${Y(13.8)}C${X(21.4)} ${Y(18)} ${X(18)} ${Y(19.6)} ${X(15.2)} ${Y(19.2)}C${X(13.2)} ${Y(18.9)} ${X(12.2)} ${Y(17.8)} ${X(12.4)} ${Y(16.6)}"/><circle class="nt-cclef" cx="${X(14.6)}" cy="${Y(16.2)}" r="2.6"/>`; };
+  return `<g class="nt-clef-c"><rect class="nt-cclef" x="${X(0)}" y="${ntN(yc - 20)}" width="4.4" height="40"/><rect class="nt-cclef" x="${X(6.2)}" y="${ntN(yc - 20)}" width="1.6" height="40"/>${lobe(-1)}${lobe(1)}</g>`;
+}
 const NT_ACC = { '-2': '𝄫', '-1': '♭', '0': '♮', '1': '♯', '2': '𝄪' };
 const ntN = v => Math.round(v * 10) / 10;
 function ntApprox(t) {
@@ -480,7 +488,7 @@ function ntName(x) {
   return x.rest ? (x.wbr ? 'whole-bar rest' : nm + ' rest') : (x.p ? Theory.pretty(x.p) + ' ' : '') + nm + (x.p ? '' : ' note');
 }
 
-/* Score.svg(input, { meter, clef: 'treble'|'bass'|'perc', keySig, counts, syllables, marks (per sounding onset: 'ok'|'no'),
+/* Score.svg(input, { meter, clef: 'treble'|'bass'|'alto'|'tenor'|'perc', keySig, counts, syllables, marks (per sounding onset: 'ok'|'no'),
    selected (event index or array), editable (data-i on each event), labels (per event), playing (event index), pickup
    (quarters before bar 1), aria }) */
 function ntSvg(input, o) {
@@ -594,6 +602,7 @@ function ntSvg(input, o) {
   const W = Math.ceil(cx + 6);
   let minY = perc ? -12 : 0, maxY = perc ? 12 : 40;
   const ext = (...ys) => ys.forEach(y => { if (y < minY) minY = y; if (y > maxY) maxY = y; });
+  if (CL && CL.cclef) ext(yOf(28) - 21, yOf(28) + 21);
   const own = A.map(() => '');
   let shared = '';
   /* stems and beams */
@@ -726,7 +735,7 @@ function ntSvg(input, o) {
   if (perc) staff += `<line class="nt-sl" x1="4" x2="${ntN(endX)}" y1="0" y2="0"/><rect class="nt-pclef" x="12" y="-9" width="2.8" height="18"/><rect class="nt-pclef" x="18" y="-9" width="2.8" height="18"/>`;
   else {
     for (let i = 0; i < 5; i++) staff += `<line class="nt-sl" x1="4" x2="${ntN(endX)}" y1="${i * NT_GAP}" y2="${i * NT_GAP}"/>`;
-    staff += `<text class="nt-clef" x="8" y="${CL.dy}" font-size="${CL.size}">${CL.glyph}</text>`;
+    staff += CL.cclef ? ntCClef(9, yOf(28)) : `<text class="nt-clef" x="8" y="${CL.dy}" font-size="${CL.size}">${CL.glyph}</text>`;
     const list = ks > 0 ? CL.sharps : CL.flats;
     for (let i = 0; i < nAcc; i++) staff += `<text class="nt-acc" x="${xKey + i * 11}" y="${yOf(Staff.step(list[i])) + 5}" text-anchor="middle">${ks > 0 ? '♯' : '♭'}</text>`;
   }
@@ -1065,7 +1074,7 @@ Tasks.meterFeel = (el, p, done) => {
 };
 
 /* ---------- MelodyCapture: record, see and edit a melody ----------
-   MelodyCapture.mount(el, { meter, bpm, bars, keySig, clef, countIn (bars, default 1), pcs, pcsLabel, initial (events),
+   MelodyCapture.mount(el, { meter, bpm, bars, keySig, clef ('treble' 'bass' 'alto' 'tenor' 'perc'), countIn (bars, default 1), pcs, pcsLabel, initial (events),
      prompt, swing, onChange(events) })
    → { events, notes, bpm, record(), stop(), play(), clear(), set(events), setSwing(v), select(i), destroy() }
    Recording takes Bus 'note' from any source (a 'perc' clef takes 'onset' instead: taps, Space, claps) and 'noteoff'

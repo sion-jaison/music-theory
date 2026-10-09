@@ -1,0 +1,79 @@
+/* ---------- voices: multi-voice notation, the part-writing editor, find the errors ---------- */
+
+/* the engraving (VoiceView) */
+.vv-box { overflow-x: auto; overflow-y: hidden; max-width: 100%; contain: inline-size; padding: 4px 2px; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.vv-box > svg, .art .vv-box > svg { display: block; max-width: none; height: auto; }
+.vv { color: var(--ink); }
+.vv .vv-sl { stroke: var(--ink); stroke-width: 1; opacity: 0.75; }
+.vv .vv-ledger { stroke: var(--ink); stroke-width: 1.2; opacity: 0.9; }
+.vv .vv-bar { stroke: var(--ink); stroke-width: 1.3; }
+.vv .vv-bar-end { fill: var(--ink); }
+.vv .vv-clef { font-family: var(--f-music); fill: var(--ink); }
+.vv .nt-cclef { fill: var(--ink); }
+.vv .nt-cclef-l { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.vv .vv-acc { font-family: var(--f-music); font-size: 34px; fill: var(--ink); }
+.vv .nt-hd { fill: var(--ink); }
+.vv .vv-stem { stroke: var(--ink); stroke-width: 1.3; }
+.vv .vv-tie { fill: var(--ink); }
+.vv .vv-fixed .nt-hd, .vv .vv-fixed .vv-acc { fill: var(--muted); }
+.vv .vv-fixed .vv-stem { stroke: var(--muted); }
+.vv .vv-lab { font-family: var(--f-display); font-weight: 800; font-size: 15px; fill: var(--ink); }
+.vv .vv-fig { font-family: var(--f-mono); font-weight: 700; font-size: 10px; fill: var(--ink); }
+/* marks: colour plus a ring, so they do not rely on colour alone */
+.vv .vv-error .nt-hd, .vv .vv-error .vv-acc { fill: var(--bad); }
+.vv .vv-error .vv-stem { stroke: var(--bad); }
+.vv .vv-warn .nt-hd, .vv .vv-warn .vv-acc { fill: var(--glow); }
+.vv .vv-warn .vv-stem { stroke: var(--glow); }
+.vv .vv-ok .nt-hd, .vv .vv-found .nt-hd { fill: var(--good); }
+.vv .vv-ok .vv-stem, .vv .vv-found .vv-stem { stroke: var(--good); }
+.vv .vv-hint .nt-hd { fill: var(--accent); }
+.vv .vv-ring { fill: none; stroke-width: 1.8; }
+.vv .vv-ring-error { stroke: var(--bad); }
+.vv .vv-ring-warn { stroke: var(--glow); stroke-dasharray: 3 2.4; }
+.vv .vv-ring-found { stroke: var(--good); }
+.vv .vv-line { stroke-width: 2.2; stroke-linecap: round; opacity: 0.85; }
+.vv .vv-line.error { stroke: var(--bad); }
+.vv .vv-line.warn { stroke: var(--glow); stroke-dasharray: 5 3; }
+.vv .vv-line.ok, .vv .vv-line.found { stroke: var(--good); }
+.vv .vv-line.hint { stroke: var(--accent); }
+/* selection, empty cells, playback */
+.vv .vv-selbg { fill: var(--accent-soft); }
+.vv .vv-sel .nt-hd, .vv .vv-sel .vv-acc { fill: var(--accent); }
+.vv .vv-sel .vv-stem { stroke: var(--accent); }
+.vv .vv-ph { fill: none; stroke: var(--muted); stroke-width: 1.3; stroke-dasharray: 2.4 2; opacity: 0.7; }
+.vv .vv-ph.sel { stroke: var(--accent); stroke-width: 2; opacity: 1; }
+.vv .vv-now .nt-hd { fill: var(--glow); }
+.vv .vv-hit { fill: transparent; pointer-events: all; cursor: pointer; }
+
+/* the part-writing editor */
+.pw { display: grid; gap: 10px; min-width: 0; }
+.pw [hidden] { display: none !important; }
+.pw-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pw-voices { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.pw-voices .choice { min-height: 36px; padding: 4px 12px; font-size: 15px; }
+.pw-voices .choice[disabled] { opacity: 0.5; cursor: default; }
+.pw-score { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 6px 4px; }
+.pw-score:focus { outline: none; border-color: var(--accent); }
+.pw-score:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pw-ed { display: flex; flex-wrap: wrap; gap: 6px; }
+.pw-ed .btn.small { min-width: 40px; padding: 6px 10px; }
+.pw-info { font-family: var(--f-mono); font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.pw-probs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pw-probs li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px 10px; border-radius: 10px; font-size: 15px; line-height: 1.4; }
+.pw-probs li.error { background: var(--bad-soft); }
+.pw-probs li.warn { background: var(--glow-soft); }
+.pw-probs li.clear { background: var(--good-soft); color: var(--good); font-weight: 700; grid-template-columns: minmax(0, 1fr); }
+.pw-probs li button { all: unset; cursor: pointer; display: block; min-width: 0; }
+.pw-probs li button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.pw-probs .pw-kind { font-family: var(--f-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; margin-top: 2px; }
+.pw-probs li.error .pw-kind { color: var(--bad); border: 1.5px solid var(--bad); }
+.pw-probs li.warn .pw-kind { color: var(--glow); border: 1.5px solid var(--glow); }
+.pw-probs .pw-rule { font-weight: 700; }
+.pw-count { font-size: 14px; color: var(--muted); }
+
+/* find the errors */
+.fe-found { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fe-found li { padding: 8px 10px; border-radius: 10px; background: var(--good-soft); font-size: 15px; line-height: 1.4; }
+.fe-found li b { color: var(--good); }
+.fe-names { display: flex; flex-wrap: wrap; gap: 8px; }
+.fe-names .choice { font-size: 15px; min-height: 40px; }
