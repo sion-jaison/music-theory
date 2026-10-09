@@ -236,6 +236,8 @@ const H = require('./helpers');
   t.check(t.$('.panel.grad') && /Beginner section complete/.test(t.$('.panel.grad').textContent), 'home shows the beginner-complete banner');
 
   // Daily Set at Level 5: a review card, the create prompts, and the cadence ear spark
+  /* passing the boss made Level 6 current (when it exists); set the boss aside so the Daily Set is a Level 5 learner's */
+  const bossRecord = M.Store.data.units['5.B']; delete M.Store.data.units['5.B'];
   t.click('[data-act="daily"]'); await t.wait(300);
   t.click('.stage [data-act="skip"]'); await t.wait(80);
   t.check(/Card 1 of/.test(stage().textContent) && (t.$('.stage .task .prompt') || t.$('.stage .task .choice')), 'Daily Set review renders a Level 5 card');
@@ -248,6 +250,7 @@ const H = require('./helpers');
   t.check(nextOn() && /5 of 5/.test(stage().textContent), 'ear spark: five rounds answered by ear');
   t.click('.stage [data-act="next"]'); await t.wait(60);
   t.check(/1%/.test(t.$('.stage .tag').textContent), 'Daily Set reaches Today’s 1%');
+  M.Store.data.units['5.B'] = bossRecord;
   t.check(M.ChordIn.users === 0, 'every ChordIn.start() was matched by a stop()');
   t.finish();
 })().catch(e => { console.log('CRASH', e.stack); process.exit(1); });

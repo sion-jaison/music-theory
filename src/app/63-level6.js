@@ -99,7 +99,7 @@ const L6_MOTIVES = [
 ];
 const L6_QUIZ_TOOLS = ['sequence', 'inversion', 'retrograde', 'augmentation', 'diminution', 'fragment'];
 function l6ToolItem(withArt) {
-  const t = MOTIVE_TOOLS.find(x => x.id === rand(L6_QUIZ_TOOLS)), key = rand(L6_KEYS), mot = l6Shift(rand(L6_MOTIVES), l6KeyShift(key));
+  const pick = rand(L6_QUIZ_TOOLS), t = MOTIVE_TOOLS.find(x => x.id === pick), key = rand(L6_KEYS), mot = l6Shift(rand(L6_MOTIVES), l6KeyShift(key));
   const v = t.fn(mot, key), gap = Motive.length(mot) * 60 / 100 + 0.4;
   const opts = shuffle([t.id].concat(shuffle(L6_QUIZ_TOOLS.filter(x => x !== t.id)).slice(0, 3)));
   return {
@@ -222,6 +222,8 @@ function l6OrnItem() {
 /* the skeleton to decorate: half notes on chord tones over I–IV–V–I in C */
 const L6_SKELETON = [{ m: 64, d: 2 }, { m: 67, d: 2 }, { m: 65, d: 2 }, { m: 69, d: 2 }, { m: 67, d: 2 }, { m: 62, d: 2 }, { m: 64, d: 2 }, { m: 60, d: 2 }];
 const L6_SKELETON_CHORDS = ['I', 'IV', 'V', 'I'];
+/* the same skeleton in quarter notes, each chord tone played twice: the second of each pair is free to become a passing or neighbour tone */
+const L6_SKELETON_PAIRS = L6_SKELETON.reduce((a, n) => a.concat([{ m: n.m, d: 1 }, { m: n.m, d: 1 }]), []);
 function l6CheckDecor(events) {
   const s = l6Sounding(events), pcs = L6_SKELETON_CHORDS.map(r => Theory.romanChord(r, 'C').notes.map(Theory.pc));
   if (s.length < 10) return 'Add more notes: split some half notes and move the new notes to neighbours or passing tones.';
@@ -307,7 +309,7 @@ const L6_MELODY_UNITS = [
       body: `<p>Notes that are not in the chord are <b>non-chord tones</b>. On a weak beat they add motion; on a strong beat (an appoggiatura) they add longing. Each has a shape: how it arrives and how it leaves.</p>${l6Deeper('Kostka, Payne & Almén, <i>Tonal Harmony</i>; Laitz, <i>The Complete Musician</i>.')}` },
     { k: 'task', tag: 'Echo', title: 'Which kind?', type: 'quiz', p: { rounds: 5, gen: () => l6NctItem(true) } },
     { k: 'task', tag: 'Explore', title: 'Ornaments', type: 'quiz', p: { rounds: 3, prompt: 'Ornaments are written as small signs above a note: tr for a trill, a short squiggle for a mordent, a sideways S for a turn. Hear each and name it.', gen: () => l6OrnItem() } },
-    { k: 'task', tag: 'Create', title: 'Workshop: decorate the skeleton', type: 'capture', p: () => ({ prompt: 'Here is the skeleton. Select a half note, halve it with [, then move the new note to a neighbour or a passing tone. Add at least two non-chord tones, then save.', meter: '4/4', bpm: 96, bars: 4, keySig: 0, initial: motiveEvents(L6_SKELETON, 'C'), name: 'Decorated skeleton', min: 10, check: l6CheckDecor, save: { level: 6, tags: ['non-chord tones'], key: 'C', prompt: 'Decorate the skeleton', extra: { chords: l6Bars(L6_SKELETON_CHORDS, 'C', 96) } } }) }
+    { k: 'task', tag: 'Create', title: 'Workshop: decorate the skeleton', type: 'capture', p: () => ({ prompt: 'Here is the skeleton with every chord tone written twice. Select the second note of a pair and play a new note to replace it: a step toward the next chord tone (passing) or a step away and back (neighbour). Make at least two, listen, then save.', meter: '4/4', bpm: 96, bars: 4, keySig: 0, initial: motiveEvents(L6_SKELETON_PAIRS, 'C'), name: 'Decorated skeleton', min: 10, check: l6CheckDecor, save: { level: 6, tags: ['non-chord tones'], key: 'C', prompt: 'Decorate the skeleton', extra: { chords: l6Bars(L6_SKELETON_CHORDS, 'C', 96) } } }) }
   ] },
   { id: '6.P', title: 'Project: a 16-bar theme', blurb: 'Draft it, review it, make version 2.', create: true, steps: [
     { k: 'card', tag: 'Name', title: 'The brief', body: '<p>Write a <b>16-bar theme</b>: a sentence answered by a period, or two periods. Use what this level taught: a motive and its tools, one high point, tendency tones that land, a groove that suits the flavour.</p><p>You will make a <b>draft</b>, review it against five questions, write <b>version 2</b>, then compare the two. Revising is the skill; it is fine if the draft wins.</p>' },
@@ -324,7 +326,7 @@ const L6_MELODY_UNITS = [
   ], doneText: 'Your theme, its review and version 2 are in your sketchbook.' },
   { id: '6.B', title: 'Boss challenge', blurb: 'Rhythm, scale degrees and motive tools.', boss: true, steps: [
     { k: 'card', tag: 'Name', title: 'Show what you know', body: '<p>Part 1: hear four rhythms in 6/8 and four syncopated rhythms in 4/4, and pick the notation for each. You need 3 of 4 each time.</p><p>Part 2: name 8 scale degrees by ear, in two keys. You need 7.</p><p>Part 3: play three transformations of a motive: its sequence, its inversion and its retrograde. Two wrong notes each are allowed.</p>' },
-    { k: 'task', tag: 'Echo', title: 'Rhythm in 6/8', type: 'rhythmDictation', p: { mode: 'choose', meter: '6/8', bpm: 66, rounds: 4, pass: 3, patterns: ['q e q e', 'q. q e', 'e e e q.', 'q e e e e', 'q. e e e', 'e e e e e e', 'q.r q e', 'q e q.'] } },
+    { k: 'task', tag: 'Echo', title: 'Rhythm in 6/8', type: 'rhythmDictation', p: { mode: 'choose', meter: '6/8', bpm: 120, rounds: 4, pass: 3, patterns: ['q e q e', 'q. q e', 'e e e q.', 'q e e e e', 'q. e e e', 'e e e e e e', 'q.r q e', 'q e q.'] } },
     { k: 'task', tag: 'Echo', title: 'Syncopation in 4/4', type: 'rhythmDictation', p: { mode: 'choose', meter: '4/4', bpm: 80, rounds: 4, pass: 3, patterns: ['q e q e q', 'e q e q q', 'q q e q e', 'e q q q e', 'q. e_q q', 'e e_q e q e', 'q e e_e e q', 'qr e q e q'] } },
     { k: 'task', tag: 'Echo', title: 'Scale degrees', type: 'degreeEar', p: { degrees: ['1', '2', '3', '4', '5', '6', '7'], keys: ['C', 'G', 'F', 'D'], rounds: 8, pass: 7, context: 'first', passMsg: 'Part 2 passed.' } },
     { k: 'task', tag: 'Echo', title: 'Motive tools', type: 'transformPlay', p: { tools: ['sequence', 'inversion', 'retrograde'], maxMisses: 2 } }
@@ -371,14 +373,20 @@ addEarSkill({ id: 'motive', label: 'Motive tools', unit: '6.7', run: (body, fin,
 addEarSkill({ id: 'phrase', label: 'Sentence or period', unit: '6.8', run: (body, fin) => Tasks.quiz(body, { rounds: 4, gen: () => l6FormItem() }, (ok, r) => fin(r.score, 4)) });
 addEarSkill({ id: 'nct', label: 'Non-chord tones', unit: '6.9', run: (body, fin, diff) => Tasks.quiz(body, { rounds: 5, gen: () => l6NctItem(diff <= 2) }, (ok, r) => fin(r.score, 5)) });
 addEarSkill({ id: 'meter', label: 'Meter by ear', unit: '6.1', run: (body, fin, diff) => Tasks.meterFeel(body, { rounds: 5, choices: diff <= 2 ? ['3/4', '6/8'] : diff <= 3 ? ['2/4', '3/4', '6/8'] : ['3/4', '6/8', '5/4', '7/8'] }, (ok, r) => fin(r.score, 5)) });
-addEarSkill({ id: 'rhythm', label: 'Rhythm dictation', unit: '6.3', run: (body, fin, diff) => Tasks.rhythmDictation(body, diff <= 2
-  ? { mode: 'choose', meter: '4/4', bpm: 80, rounds: 4, patterns: ['q e q e q', 'e q e q q', 'q q e q e', 'q. e q q', 'e e_q e q e', 'q e e_e e q'] }
-  : { mode: 'choose', meter: rand(['6/8', '4/4']), bpm: 72, rounds: 4, patterns: ['q e q e', 'q. q e', 'e e e q.', 'q e e e e', 'q. e e e', 'e e e e e e'] }, (ok, r) => fin(r.score, 4)) });
+/* dictation patterns per meter: a 6/8 bar is three quarters long, a 4/4 bar four */
+const L6_DICT = {
+  '4/4': ['q e q e q', 'e q e q q', 'q q e q e', 'q. e q q', 'e e_q e q e', 'q e e_e e q'],
+  '6/8': ['q e q e', 'q. q e', 'e e e q.', 'q e e e e', 'q. e e e', 'e e e e e e']
+};
+addEarSkill({ id: 'rhythm', label: 'Rhythm dictation', unit: '6.3', run: (body, fin, diff) => {
+  const m = diff <= 2 ? '4/4' : rand(['6/8', '4/4']);
+  return Tasks.rhythmDictation(body, { mode: 'choose', meter: m, bpm: m === '6/8' ? 102 + diff * 6 : 72 + diff * 4, rounds: 4, patterns: L6_DICT[m] }, (ok, r) => fin(r.score, 4));
+} });
 
 /* ---------- the level ---------- */
 const L6_DAILY = [
   { meter: '4/4', bpm: 92, prompt: 'Eight bars in 4/4 that use one motive at least three times.' },
-  { meter: '6/8', bpm: 66, prompt: 'Eight bars in 6/8 with one high point in bar 6.' },
+  { meter: '6/8', bpm: 108, prompt: 'Eight bars in 6/8 with one high point in bar 6.' },
   { meter: '4/4', bpm: 100, swing: 0.62, prompt: 'Eight swung bars with three syncopations.' },
   { meter: '3/4', bpm: 96, prompt: 'A waltz melody: eight bars, a sentence (idea, repeat, continuation).' },
   { meter: '4/4', bpm: 88, prompt: 'Eight bars where ti always goes to do and fa always goes to mi.' },
@@ -386,8 +394,7 @@ const L6_DAILY = [
   { meter: '4/4', bpm: 92, prompt: 'Eight bars that start with a leap and fill it with steps.' },
   { meter: '7/8', bpm: 140, prompt: 'A riff in 7/8 (2 + 2 + 3), repeated with one change each time.' }
 ];
-/* Level 6 needs the notation engine (12-notation.js); until it is in the build the level stays hidden */
-if (typeof Score !== 'undefined') addLevel({
+addLevel({
   n: 6, section: 'Intermediate', title: 'Groove & Line', tagline: 'Compound and odd meters, swing, scale degrees, motives, sentences and periods',
   units: (typeof L6_RHYTHM_UNITS !== 'undefined' ? L6_RHYTHM_UNITS : []).concat(L6_MELODY_UNITS),
   cards: Object.assign({}, typeof L6_RHYTHM_CARDS !== 'undefined' ? L6_RHYTHM_CARDS : {}, L6_MELODY_CARDS),

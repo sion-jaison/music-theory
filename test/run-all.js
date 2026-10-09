@@ -1,7 +1,7 @@
 /* Runs every test file in order and prints a one-line summary per file (full output on failure). */
 const { spawnSync } = require('child_process');
 const fs = require('fs');
-const files = ['theory.test.js', 'pitch.test.js', 'chord.test.js', 'components.js', 'toolbox.js', 'smoke.js', 'rhythm.js', 'level2.js', 'level3.js', 'level4.js', 'level5.js']
+const files = ['theory.test.js', 'pitch.test.js', 'chord.test.js', 'components.js', 'notation.js', 'toolbox.js', 'smoke.js', 'rhythm.js', 'level2.js', 'level3.js', 'level4.js', 'level5.js', 'level6-rhythm.js', 'level6.js']
   .filter(f => fs.existsSync(__dirname + '/' + f));
 let failed = 0;
 for (const f of files) {

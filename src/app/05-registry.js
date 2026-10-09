@@ -13,6 +13,9 @@ const CARD_TYPES = {};
 
 /* levels 1–5 are the beginner section, 6–10 the intermediate section */
 const SECTIONS = ['Beginner', 'Intermediate'];
+/* the planned last level of each section, and the titles of planned levels not built yet */
+const SECTION_LAST = { Beginner: 5, Intermediate: 10 };
+const PLANNED_LEVELS = { 6: 'Groove & Line', 7: 'Colours', 8: 'Voices', 9: 'Borrow & Travel', 10: 'Write the Song' };
 function addLevel(lv) {
   lv.section = lv.section || (lv.n <= 5 ? 'Beginner' : 'Intermediate');
   lv.units.forEach(u => { u.level = lv.n; });

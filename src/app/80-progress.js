@@ -15,7 +15,7 @@ function nextUnit(n) {
   return lv ? lv.units.find(u => !unitDone(u.id)) : undefined;
 }
 const sectionLevels = name => LEVELS.filter(l => l.section === name);
-const sectionDone = name => { const ls = sectionLevels(name); return ls.length > 0 && levelPassed(ls[ls.length - 1].n); };
+const sectionDone = name => levelByN(SECTION_LAST[name]) ? levelPassed(SECTION_LAST[name]) : false;
 const beginnerDone = () => sectionDone('Beginner');
 const isIntermediate = () => { const lv = levelByN(currentLevel()); return !!lv && lv.section === 'Intermediate'; };
 const LADDER = [0, 1, 3, 7, 14, 30];

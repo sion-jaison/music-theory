@@ -132,12 +132,16 @@ Chords: call `ChordIn.start()` (and `ChordIn.stop()` in cleanup). Notes tapped w
 | `seq` | `prompt, notes (array or function), show` | play a short sequence; one slip allowed |
 | `chord` | `prompt, chord (symbol or function), tones` | play one chord; one wrong chord allowed |
 | `play`, `step`, `nameBlack` | Level 1 types | |
+| `l6clap` | `meter, patterns, bpm, counts, swing, pickup, prompt` | clap one rhythm back, one try |
+| `l6degree` | `degrees` | name one scale degree by ear after the key |
 
 A level can register its own type: `CARD_TYPES.myType = (el, card, fin) => cleanup`, calling `fin(ok)` exactly once.
 
 ## Sketches
 
 `saveSketch({ name, notes: [{ m, t, d }], prompt, level, chords: [{ sym, t, d }], key, bpm, from })` stores an idea in the sketchbook; `playSketch(s)` plays melody and chords. `Store.data.sketches` is newest first. Levels grow the same idea: motif (1) → phrase (2) → harmonized phrase (3) → minor version (4) → 8-bar piece (5); set `from` to the id of the sketch it grew from.
+
+From Level 6 on, sketches written in the score editor (`Tasks.capture`) also carry `score: { meter, bpm, keySig, events, swing? }`, so they reopen as notation, and `tags` (e.g. `['contour', 'climax']`) for the sketchbook filter. Project drafts add `project` (the unit id), `version` (1 or 2), `review: { scores, note }` on the draft and `compare: { winner, why }` on version 2.
 
 ## Storage and progress
 

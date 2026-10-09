@@ -390,7 +390,7 @@ function contourSVG(notes) {
 const PROJECT_FLAVOURS = {
   song: { name: 'Song', meter: '4/4', bpm: 92, swing: 0.5, note: 'Pop and singer-songwriter: a steady 4/4, a hook you could sing.' },
   jazz: { name: 'Jazz', meter: '4/4', bpm: 120, swing: 0.62, note: 'Swung eighths, a relaxed walk, room for blue notes.' },
-  classical: { name: 'Classical', meter: '6/8', bpm: 72, swing: 0.5, note: 'Lilting 6/8, clear phrases and cadences, a theme that could grow into variations.' },
+  classical: { name: 'Classical', meter: '6/8', bpm: 108, swing: 0.5, note: 'Lilting 6/8, clear phrases and cadences, a theme that could grow into variations.' },
   film: { name: 'Film & game', meter: '7/8', bpm: 132, swing: 0.5, note: 'A driving odd meter for chase scenes and boss levels.' }
 };
 const projectOf = id => { const all = Store.data.projects || (Store.data.projects = {}); return all[id] || (all[id] = {}); };

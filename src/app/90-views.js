@@ -97,10 +97,11 @@ function showComplete(unit) {
   const lv = levelByN(unit.level), after = levelByN(unit.level + 1);
   const nx = nextUnit(unit.level) || (unit.boss && after ? after.units[0] : null);
   const cards = (CARD_DEFS[unit.id] || []).length;
-  const endsSection = unit.boss && (!after || after.section !== lv.section);
+  const endsSection = unit.boss && lv.n === SECTION_LAST[lv.section];
   const big = unit.boss ? (endsSection ? `${lv.section} section complete.` : `Level ${unit.level} passed.`) : unit.title + ': done.';
   const body = cards ? `${cards} review card${cards > 1 ? 's' : ''} joined your deck. They come back on a growing schedule: tomorrow, then 3, 7, 14 and 30 days.` : (unit.doneText || (unit.create ? 'Saved to your sketchbook.' : unit.workshop ? 'Your workshop sketch is in your sketchbook.' : 'Nice work.'));
-  const pass = unit.boss ? `<p>${lv.passText || ''}${after ? ` ${after.section !== lv.section ? `The ${after.section.toLowerCase()} section starts now: Level ${after.n}` : `Level ${after.n}`}, <b>${after.title}</b>, is open.` : ''}</p>` : '';
+  const coming = !after && PLANNED_LEVELS[unit.level + 1] ? ` Level ${unit.level + 1}, <b>${PLANNED_LEVELS[unit.level + 1]}</b>, is on its way; your Daily Set keeps everything sharp until then.` : '';
+  const pass = unit.boss ? `<p>${lv.passText || ''}${after ? ` ${after.section !== lv.section ? `The ${after.section.toLowerCase()} section starts now: Level ${after.n}` : `Level ${after.n}`}, <b>${after.title}</b>, is open.` : coming}</p>` : '';
   view.innerHTML = `<section class="panel done-card"><div class="eyebrow">${unit.boss ? 'Level ' + unit.level : unit.create ? 'Create' : 'Unit ' + unit.id} complete</div><div class="big">${big}</div><p>${body}</p>${pass}<div class="row">${nx ? `<button type="button" class="btn primary" data-act="next">${nx.boss ? 'Level ' + nx.level + ' boss' : 'Next: ' + nx.title}</button>` : ''}<button type="button" class="btn" data-act="home">Level ${nx ? nx.level : unit.level} path</button></div></section>`;
   const nb = view.querySelector('[data-act="next"]'); if (nb) nb.onclick = () => go('lesson', nx.id);
   view.querySelector('[data-act="home"]').onclick = () => go('home', nx ? nx.level : unit.level);
@@ -171,7 +172,7 @@ function renderDaily() {
     },
     function newBite() {
       const nx = nextUnit();
-      const f = frame(nx ? (nx.boss ? `Level ${nx.level} boss challenge` : `Up next: ${nx.title}`) : 'Every level complete', nx ? nx.blurb : 'You have finished every beginner unit. Your review deck keeps the skills sharp.');
+      const f = frame(nx ? (nx.boss ? `Level ${nx.level} boss challenge` : `Up next: ${nx.title}`) : 'Every level complete', nx ? nx.blurb : 'You have finished every unit built so far. Your review deck and Ear Gym keep the skills sharp.');
       if (!nx) { f.ready(); return; }
       f.body.innerHTML = `<button type="button" class="btn primary" data-act="open">Start ${nx.boss ? 'the boss challenge' : nx.create ? nx.title : 'unit ' + nx.id}</button>`;
       f.body.querySelector('[data-act="open"]').onclick = () => {
@@ -270,7 +271,7 @@ function cardBlack(el, c, fin) {
 
 /* ---------- Sketchbook ---------- */
 /* what stage of growth a sketch is at, from the level that made it */
-const sketchKind = s => ({ 1: 'motif', 2: 'phrase', 3: 'with chords', 4: 'minor', 5: '8-bar piece' })[s.level] || 'idea';
+const sketchKind = s => s.version === 2 ? 'version 2' : s.project ? 'project draft' : ({ 1: 'motif', 2: 'phrase', 3: 'with chords', 4: 'minor', 5: '8-bar piece', 6: 'theme' })[s.level] || 'idea';
 function renderSketchbook() {
   const list = Store.data.sketches;
   view.innerHTML = `<section class="panel"><div class="level-head"><div><div class="eyebrow">Sketchbook</div><h2>Your musical ideas</h2></div><span class="chip">${list.length} saved</span></div><p style="color:var(--muted);margin-top:8px;max-width:60ch">Every idea you save lives here. One idea grows through the levels: a motif, then a phrase, then a phrase with chords, a minor version, and finally an 8-bar piece. Saved in this browser.</p><div class="sketches" style="margin-top:16px">${list.length ? list.map(s => `<div class="sketch" data-id="${s.id}"><div><h3>${esc(s.name)}</h3><div class="meta"><span class="chip">${sketchKind(s)}</span> ${(s.notes || []).map(n => SHARP[mod12(n.m)]).join(' · ')}${s.chords && s.chords.length ? ' · chords ' + s.chords.map(c => Theory.pretty(c.sym)).join(' ') : ''}${s.key ? ' · ' + esc(s.key) : ''} · ${s.created}${s.prompt ? ' · ' + esc(s.prompt) : ''}${s.from && list.some(x => x.id === s.from) ? ' · grew from “' + esc(list.find(x => x.id === s.from).name) + '”' : ''}</div></div><div class="row"><button type="button" class="btn small" data-act="play">▶ Play</button><span class="del"><button type="button" class="btn small ghost" data-act="del">Delete</button></span></div></div>`).join('') : '<div class="empty-state"><b>No sketches yet.</b><span>Your first one comes from the “Your first motif” stop on the Level 1 path, or the Create step of any Daily Set.</span><button type="button" class="btn primary" data-act="motif">Make a motif now</button></div>'}</div></section>`;
