@@ -235,7 +235,7 @@ function vlCheck(voices, opts) {
     out.push({ rule, col, cols: extra.cols || [col], voices: vs, severity: sev, text });
   }
   const pair = (i, j, c) => `${N[i][c].letter}–${N[j][c].letter}`;
-  const chorale = X.style === 'chorale', free = X.style === 'free';
+  const free = X.style === 'free';
 
   /* --- one column at a time --- */
   for (let c = 0; c < C; c++) {
@@ -366,7 +366,7 @@ function vlCheck(voices, opts) {
       const a = v[c - 1], b = v[c];
       if (!a || !b || X.held[k][c]) { prevMove = null; continue; }
       const d = b.m - a.m;
-      if (!d) continue;
+      if (!d) { prevMove = null; continue; }
       const lo = d > 0 ? a : b, hi = d > 0 ? b : a;
       const iv = Theory.interval(lo.name, hi.name);
       const span = `from ${beat(c - 1)} to ${beat(c)}`;
@@ -1088,11 +1088,15 @@ const PartWriter = {
   mount(el, o) {
     o = Object.assign({ key: 'C', mode: 'major', mic: true, sing: true }, o || {});
     const S = pwSetup(o), n = S.n, cols = S.cols, key = Theory.stripOct(o.key), mode = o.mode === 'minor' ? 'minor' : 'major';
-    const fixed = new Set(S.fixed), uid = ++pwUid;
+    const fixed = new Set(S.fixed);
     const names = o.names || (n === 4 ? ['soprano', 'alto', 'tenor', 'bass'] : S.cantus != null ? (S.cantus === 0 ? ['cantus', 'counterpoint'] : ['counterpoint', 'cantus']) : ['upper voice', 'lower voice']);
     const romans = o.romans || null, chordsOn = romans && !S.sp;
     const secPerCol = o.secPerCol || (S.sp === 1 ? 1.1 : S.sp ? 0.7 : 1);
     const order = o.order || (n === 4 ? 'column' : 'voice');
+    /* the staff layout is fixed for the session, so it does not jump while notes go in: two voices share one staff when the
+       given voice sits in the treble range and the written one goes above it */
+    const givenMs = [].concat(...S.lines.filter(Boolean).map(l => l.filter(x => x != null).map(vlMidi)));
+    const staves = o.staves || (n === 2 ? (givenMs.length && Math.min(...givenMs) >= 55 && S.cantus !== 0 && !fixed.has(0) ? 'single' : 'grand') : undefined);
     const chordNotes = c => { const ch = chordsOn ? vlRoman(romans[c], key, mode) : null; return ch ? ch.notes : null; };
     const spell = (m, c) => vlSpell(m, key, mode, chordNotes(c));
     const norm = (x, c) => { const nn = vlNote(x, key, mode, chordNotes(c)); return nn ? nn.name : null; };
@@ -1148,7 +1152,7 @@ const PartWriter = {
       Object.keys(seen).forEach(k => { const [c, v] = k.split(':').map(Number); marks.push({ col: c, voice: v, kind: seen[k] }); });
       const ph = [];
       for (let c = 0; c < cols; c++) for (let k = 0; k < n; k++) if (editable(c, k) && !V[k][c]) ph.push({ col: c, voice: k });
-      box.innerHTML = vvSvg({ voices: V, key, mode, style: S.style, labels: romans, marks, lines, sel, editable: true, placeholders: ph, fixed: S.fixed, staves: o.staves, cantus: S.cantus, names: names.map(vlCap) });
+      box.innerHTML = vvSvg({ voices: V, key, mode, style: S.style, labels: romans, marks, lines, sel, editable: true, placeholders: ph, fixed: S.fixed, staves, cantus: S.cantus, names: names.map(vlCap) });
       el.querySelectorAll('[data-v]').forEach(b => b.setAttribute('aria-pressed', String(!!sel && +b.dataset.v === sel.voice)));
       bOne.textContent = '▶ Play ' + (sel ? names[sel.voice] : 'one voice');
       info.textContent = describe();
