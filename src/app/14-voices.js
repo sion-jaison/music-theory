@@ -306,7 +306,7 @@ function vlCheck(voices, opts) {
       if (!a1 || !a2 || !b1 || !b2) continue;
       const da = a2.m - a1.m, db = b2.m - b1.m;
       /* overlap: neighbouring voices only, both moving (if one holds, it is a crossing, reported above) */
-      if (j === i + 1 && da && db) {
+      if (j === i + 1 && da && db && a1.m !== b1.m) {
         if (a2.m < b1.m) add('overlap', c + 1, [i, j], `The ${nm(i)} moves down to ${a2.name} on ${beat(c + 1)}, below the ${nm(j)}’s last note (${b1.name}). Keep each voice from passing the note its neighbour just sang.`, { cols: [c, c + 1] });
         else if (b2.m > a1.m) add('overlap', c + 1, [i, j], `The ${nm(j)} moves up to ${b2.name} on ${beat(c + 1)}, above the ${nm(i)}’s last note (${a1.name}). Keep each voice from passing the note its neighbour just sang.`, { cols: [c, c + 1] });
       }
@@ -437,7 +437,7 @@ function vlSpecies(X, add, beat, nm) {
       const v1 = iv(c1), v2 = iv(c2), p1 = vlPerf(v1.semis), p2 = vlPerf(v2.semis);
       const moved = N[0][c1].m !== N[0][c2].m && N[1][c1].m !== N[1][c2].m;
       if (!p1 || !p2 || !moved || (p1 === '5') !== (p2 === '5')) continue;
-      const word = p1 === '5' ? '5ths' : 'octaves';
+      const word = p1 === '5' ? '5ths' : p1 === '1' && p2 === '1' ? 'unisons' : p1 === '1' || p2 === '1' ? 'octaves and unisons' : 'octaves';
       const rule = p1 === '5' ? 'parallel5' : 'parallel8';
       add(rule, c2, [0, 1], sp === 2
         ? `The voices make ${word} on two strong beats in a row (${beat(c1)} and ${beat(c2)}). The ear still hears parallel ${word}; change one of them.`
@@ -1117,12 +1117,12 @@ const PartWriter = {
       </div>
       <p class="pw-info" aria-live="polite"></p>
       <div class="row"><button type="button" class="btn small" data-a="play">▶ Play all</button><button type="button" class="btn small" data-a="one">▶ Play this voice</button>${o.sing && n === 2 && fixed.size === 1 ? '<button type="button" class="btn small" data-a="sing">Sing along</button>' : ''}<button type="button" class="btn small ghost" data-a="clear">Clear all</button></div>
-      <p class="fb info pw-fb" aria-live="polite"></p>
+      <div class="pw-msg"><p class="fb info" aria-live="polite"></p></div>
       <p class="pw-count" aria-live="polite"></p>
       <ul class="pw-probs"></ul>
     </div>`;
     const $ = s => el.querySelector(s);
-    const box = $('.pw-score'), info = $('.pw-info'), f = $('.pw-fb'), count = $('.pw-count'), list = $('.pw-probs');
+    const box = $('.pw-score'), info = $('.pw-info'), f = $(".pw-msg .fb"), count = $('.pw-count'), list = $('.pw-probs');
     const bOne = $('[data-a="one"]'), bClear = $('[data-a="clear"]'), bSing = $('[data-a="sing"]');
     const colName = c => 'beat ' + (c + 1);
     function describe() {
@@ -1387,9 +1387,9 @@ Tasks.findErrors = (el, p, done) => {
     <div class="row"><span class="chip live">${esc(Theory.keyName(key, mode))}</span><button type="button" class="btn small" data-act="play">▶ Play it</button><span class="chip" data-count></span></div>
     <div class="vv-box pw-score fe-score" tabindex="0" role="group" aria-label="The score. Click a note that breaks a rule, or move with the arrow keys and press Enter."></div>
     <div class="fe-names" hidden></div>
-    <p class="fb info fe-fb" aria-live="polite">Listen first, then look at how each voice moves.</p>
+    <div class="fe-msg"><p class="fb info" aria-live="polite">Listen first, then look at how each voice moves.</p></div>
     <ul class="fe-found"></ul><div class="fe-fix"></div></div>`;
-  const $ = s => el.querySelector(s), box = $('.fe-score'), f = $('.fe-fb'), cnt = $('[data-count]'), namesEl = $('.fe-names'), list = $('.fe-found');
+  const $ = s => el.querySelector(s), box = $('.fe-score'), f = $(".fe-msg .fb"), cnt = $('[data-count]'), namesEl = $('.fe-names'), list = $('.fe-found');
   function render() {
     const marks = [];
     planted.forEach((pl, i) => { if (found.has(i)) pl.voices.forEach(v => pl.cols.forEach(c => marks.push({ col: c, voice: v, kind: 'found' }))); });
