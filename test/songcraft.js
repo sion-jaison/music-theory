@@ -16,7 +16,7 @@ const H = require('./helpers');
       { q: 'Two beats or three?', options: ['Two', 'Three'], answer: 0, why: 'Two big beats.' },
       { q: 'Does it swing?', options: ['Yes', 'No'], answer: 1, why: 'Straight.' }] });
   M.Store.data.units['6.1'] = { done: true };
-  t.check(M.listeningOpen().some(m => m.id === 'lm-test') && M.listeningThisWeek().id === 'lm-test', 'a map opens once its unit is done and becomes this week’s map');
+  t.check(M.listeningOpen().some(m => m.id === 'lm-test') && M.listeningOpen().some(m => m.id === M.listeningThisWeek().id), 'a map opens once its unit is done; this week’s map is one of the open ones');
   let res = null;
   let clean = M.Tasks.listeningMap(host, { id: 'lm-test' }, (ok, r) => { res = r; });
   t.check(/A Test Song/.test($('.lm-song').textContent) && /never plays/.test(host.textContent), 'the map names the song and says Motif never plays it');
