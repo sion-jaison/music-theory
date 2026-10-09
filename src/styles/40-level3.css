@@ -1,0 +1,95 @@
+/* ---------- Level 3 · Stack It: chord namer, explorer chips, guitar boxes, piano shapes, harmonizer ---------- */
+
+/* task layouts: stack the parts with a little air */
+.l3-task { display: grid; gap: 12px; }
+.l3-showrow { margin-top: 10px; }
+
+/* 3.1: the app names your first chord */
+.l3-first { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: stretch; }
+.l3-namer { display: grid; align-content: center; gap: 4px; padding: 14px 16px; border-radius: var(--r); border: 2px dashed var(--line); background: var(--surface-2); min-width: 0; transition: border-color .2s, background .2s; }
+.l3-namer .big-name { overflow-wrap: anywhere; }
+.l3-namer.hit { border-style: solid; border-color: var(--good); background: var(--good-soft); }
+.l3-namer.hit .big-name { color: var(--good); animation: l3pop .35s ease-out; }
+@keyframes l3pop { from { transform: scale(0.8); } to { transform: scale(1); } }
+.l3-namer .big-name.idle { color: var(--muted); opacity: 0.5; }
+.l3-namer-sub { font-family: var(--f-mono); font-size: 14px; color: var(--muted); min-height: 1.4em; }
+.l3-fig { margin: 0; display: grid; justify-items: center; gap: 2px; padding: 6px 8px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); }
+.l3-fig figcaption { font-size: 12px; color: var(--muted); }
+.l3-fig .l3-g { width: 96px; height: auto; }
+.l3-how { font-size: 14px; color: var(--muted); max-width: 62ch; }
+.l3-how b { color: var(--ink); }
+
+/* chord chips (explorer) */
+.l3-ex { display: grid; gap: 10px; margin-top: 14px; }
+.l3-chips .choice { display: inline-grid; justify-items: center; line-height: 1.15; min-width: 52px; }
+.l3-chips .choice small { font-family: var(--f-mono); font-size: 11px; font-weight: 500; color: var(--muted); }
+.l3-chips .choice[aria-pressed="true"] small { color: inherit; }
+.l3-info { font-family: var(--f-mono); font-size: 14px; color: var(--muted); min-height: 1.5em; overflow-wrap: anywhere; }
+
+/* guitar chord boxes */
+.l3-g { display: block; color: var(--ink); }
+.l3-g .gname { font-family: var(--f-display); font-weight: 800; font-size: 16px; fill: var(--ink); }
+.l3-g .str { stroke: var(--muted); stroke-width: 1.3; }
+.l3-g .fr { stroke: var(--line); stroke-width: 1.5; }
+.l3-g .nut { stroke: var(--ink); stroke-width: 5; stroke-linecap: square; }
+.l3-g .dot { fill: var(--accent); }
+.l3-g .fing { font-family: var(--f-mono); font-weight: 700; font-size: 10px; fill: var(--accent-ink); }
+.l3-g .open { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.l3-g .mk { font-family: var(--f-mono); font-size: 13px; fill: var(--muted); }
+.l3-g .gnote { font-family: var(--f-mono); font-size: 9px; fill: var(--muted); }
+.l3-gboxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.l3-gbox { padding: 4px 2px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); min-width: 0; }
+.l3-gbox:hover { border-color: var(--accent); }
+.l3-gbox[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.l3-gbox .l3-g { width: 100%; max-width: 120px; height: auto; margin: 0 auto; }
+.q-art .l3-g { width: 110px; height: auto; }
+.l3-gdetail { margin-top: 10px; }
+
+/* piano shape */
+.l3-pshape { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
+.l3-pshape-k { overflow-x: auto; max-width: 100%; }
+.l3-pshape-t { flex: 1 1 220px; display: grid; gap: 8px; min-width: 0; }
+.l3-keys { display: block; max-width: 100%; height: auto; }
+.l3-keys .w { fill: var(--key-w); stroke: var(--key-w-edge); stroke-width: 1; }
+.l3-keys .b { fill: var(--key-b); stroke: var(--key-b); }
+.l3-keys .w.on { fill: var(--glow); stroke: var(--key-w-edge); }
+.l3-keys .b.on { fill: var(--glow); stroke: var(--key-b); }
+.l3-keys .kl { font-family: var(--f-mono); font-size: 10px; font-weight: 700; fill: var(--ink); }
+
+/* tables: row headers hold chord symbols and names, so no capitals */
+.l3-tbl tbody th { font-family: var(--f-body); font-size: 15px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.l3-tbl tbody th small { display: block; font-weight: 400; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.l3-tight th, .l3-tight td { padding: 7px 8px; }
+.l3-tight td { white-space: nowrap; }
+.l3-tight td:last-child { white-space: normal; min-width: 5.5em; }
+
+/* compact tables (Roman numerals) */
+.l3-rn th, .l3-rn td { padding: 6px 5px; text-align: center; white-space: nowrap; }
+.l3-rn tbody th { text-align: left; font-family: var(--f-body); font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 700; }
+.l3-rn thead th { font-size: 13px; text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 700; }
+
+/* 3.H harmonizer */
+.l3-field select { min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; width: 100%; max-width: 360px; }
+.l3-nbars { gap: 8px; }
+.l3-nbars .choice { min-width: 48px; }
+.l3-key { font-size: 15px; color: var(--muted); max-width: 64ch; }
+.l3-key b { color: var(--ink); }
+.l3-bars { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.l3-bar { display: grid; gap: 8px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); min-width: 0; }
+.l3-bar-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.l3-bar-notes { font-family: var(--f-mono); font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.l3-bar-notes b { color: var(--ink); text-decoration: underline; text-decoration-color: var(--glow); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+.l3-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.l3-opt { display: grid; justify-items: center; gap: 0; min-height: 56px; padding: 6px 4px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); line-height: 1.2; min-width: 0; }
+.l3-opt b { font-family: var(--f-display); font-size: 18px; }
+.l3-opt span { font-family: var(--f-mono); font-size: 13px; }
+.l3-opt small { font-size: 11px; font-weight: 700; color: var(--glow); min-height: 1.2em; }
+.l3-opt.fits { border-color: var(--glow); }
+.l3-opt[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.l3-opt[aria-pressed="true"] small { color: var(--accent-ink); }
+
+@media (max-width: 520px) {
+  .l3-first { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .l3-fig .l3-g { width: 80px; }
+  .l3-namer { padding: 10px 12px; }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "motif",
+  "private": true,
+  "description": "Motif: a beginner music theory platform that listens to you play",
+  "scripts": {
+    "build": "python3 build.py",
+    "test": "python3 build.py && node test/run-all.js",
+    "preview": "python3 build.py && wrangler dev",
+    "deploy": "python3 build.py && wrangler deploy"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3",
+    "wrangler": "^4.149.0"
+  }
+}
