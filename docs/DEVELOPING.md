@@ -21,6 +21,11 @@ src/app/*.js           the app, concatenated in name order inside one strict-mod
   13-intermediate.js   intermediate pieces: Drone and key context, Tasks.degreeEar, the adaptive EarGym (addEarSkill),
                        Motive tools and Tasks.variationLab, contour, and the project steps (projectSetup, projectDraft,
                        review, compare)
+  15-backing.js        Backing: a band (drums, bass, chords) in eleven styles over any chord list; start, ui, arrange, render
+  16-midifile.js       MidiFile: any sketch as a Standard MIDI File (melody, chords, bass, parts, S A T B voices), and a reader
+  17-transcribe.js     Transcribe: chords from a recording (the learner's own file or a practice track), with a waveform,
+                       an A–B loop and slow-down; Tasks.transcribe
+  18-instruments.js    INSTRUMENTS and Instruments: ranges, transpositions, clefs, written keys, range checks in words
   19-songcraft.js      Listening Maps (addListeningMap, Tasks.listeningMap: real songs by title only), the chord sheet
                        (ChordSheet: chords per bar or half bar as Roman numerals, key changes, the melody's fit; SheetHas
                        questions for checks) and Tasks.songDraft (chords plus a melody; drafts and version 2 for projects)
@@ -29,9 +34,9 @@ src/app/*.js           the app, concatenated in name order inside one strict-mod
   80-progress.js       units done, level unlocks, review scheduling, sketches, streak, personal bests
   85-lesson.js         lesson runner
   90-views.js          home, lesson, Daily Set, sketchbook, setup
-  95-toolbox.js        Toolbox
+  95-toolbox.js        Toolbox: reference tabs, plus the Studio tabs (Transcribe, Export MIDI, Instruments)
   99-boot.js           start-up
-test/                  Node tests (theory, pitch, chord) and jsdom walkthroughs (smoke, rhythm, level2 … level5)
+test/                  Node tests (theory, pitch, chord) and jsdom walkthroughs (smoke, rhythm, studio, level2 … level6)
 ```
 
 All `src/app` files share one scope, so a function or `const` defined in an earlier file is visible in later ones. Names must be unique across files. Function declarations are hoisted; `const` values are not, so top-level code may only use constants from earlier files.
@@ -114,7 +119,31 @@ Chords: call `ChordIn.start()` (and `ChordIn.stop()` in cleanup). Notes tapped w
 
 ## Sound
 
-`Sound.tone(midi, when, dur, vel)`, `Sound.seq([{ m, t, d, v }])` (returns ms), `Sound.chord(midis, when, dur)`, `Sound.click(when, accent, soft)`, `Sound.wood(when)`, `Sound.now()`. `playChordList([{ sym, t, d }], oct)` plays chord symbols. `Theory.voicing(root, q, oct, inversion)` gives MIDI numbers. The mic ignores input while the app's own sound is playing (`Sound.busyUntil`).
+`Sound.tone(midi, when, dur, vel)`, `Sound.seq([{ m, t, d, v }])` (returns ms), `Sound.chord(midis, when, dur)`, `Sound.click(when, accent, soft)`, `Sound.wood(when)`, `Sound.now()`. A synthesized kit and band: `Sound.kick/snare/hat/ride/rim(when, vel)` (`Sound.hat(when, vel, true)` is open), `Sound.bass(midi, when, dur, vel)`, `Sound.pad(midis, when, dur, vel, attack)`. `Sound.routed(gainNode, fn, { gate })` sends everything fn plays through a gain node (stop by fading it); `Sound.offline(ctx, fn)` plays into an OfflineAudioContext instead. `playChordList([{ sym, t, d }], oct)` plays chord symbols. `Theory.voicing(root, q, oct, inversion)` gives MIDI numbers. The mic ignores input while the app's own sound is playing (`Sound.busyUntil`).
+
+## Studio tools
+
+Four tools for Levels 7–10, each with a block comment at the top of its file listing every option. `test/studio.js` shows them in use.
+
+**Backing** (`15-backing.js`): a band that plays a chord progression in a style. Styles (`Backing.STYLES[id]` has `name`, `desc`, `meter`, `bpm`, `swing`): `pop`, `rock`, `ballad`, `swing`, `bossa`, `waltz` (3/4), `ballad68` (6/8), `odd54` (5/4 as 3 + 2), `odd78` (7/8 as 2 + 2 + 3), `funk`, `ambient` (no drums).
+
+```js
+const band = Backing.start({ style: 'swing', chords: ['ii7', 'V7', 'Imaj7'], key: 'B♭', bpm: 160,
+  mute: { chords: true }, onChord: (i, chord) => …, onBar: n => …, onEnd });   // loop: true by default; bars: 8 to stop
+band.setMute('drums', true); band.setChords([{ sym: 'Cm7', beats: 2 }, …]); band.setTempo(120); band.stop();
+const w = Backing.ui(el, { style: 'bossa', chords, key, styles: ['bossa', 'swing'] });   // picker, tempo, play, mutes; w.destroy()
+Backing.arrange({ style, chords, … }).events   // [{ role, kind, t, d, m | ms, v, bar }] in beats: what start() plays
+```
+
+Chords may be symbols, Roman numerals (with `key`, `mode`), `{ sym | roman, beats }`, `Theory.progression` objects, or a ChordSheet timeline `[{ sym, t, d }]` in beats. `melody` puts notes (in beats) or a sketch on top. Every role (drums, bass, chords, melody) has its own gain node under the band's bus, so `stop()` and `setMute()` silence notes already scheduled. The mic keeps listening while it plays (`gate: true` to change that). bpm is quarter notes per minute in every meter, as in `Score`. `Backing.voiceLead(chords, 'full' | 'shell' | 'power' | 'quartal', n, [lo, hi])` gives smooth voicings on their own; `Backing.styleFor(meter, preferred)` picks a style for a meter. The Level 5 loop (`l5Engine`, `l5Loop`) is unchanged.
+
+**MidiFile** (`16-midifile.js`): `MidiFile.download(sketch)` saves `Name.mid`; `MidiFile.fromSketch(sketch)` gives the bytes (type 1, 480 PPQ) and `MidiFile.parse(bytes)` reads them back. Tracks: Melody (`score` or `notes`), Chords and Bass (from `chords`), each of `parts: [{ name, notes, inst | program, channel (1–16), drums, role }]`, and `voices` (S A T B), after a conductor track with the tempo, meter and key signature. A sketch with `backing: { style }` exports that band (drums on channel 10).
+
+**Transcribe** (`17-transcribe.js`): `Tasks.transcribe(el, { prompt, need: 4, practice: { romans, key, mode, bpm, style }, save: { level, tags } }, done)`. The learner opens an audio file (nothing is uploaded) or the practice track, loops and slows a passage, and confirms each suggested chord by ear and by playing it; `done(true, { chords, sketch })` after saving a sketch tagged `transcription`. The pure parts (`Transcribe.chroma`, `frames`, `smooth`, `peaks`, `loopOf`, `wav`) take plain `Float32Array`s. The chord analysis is the mic's (`spectrumChord` in `00-core.js`).
+
+**Instruments** (`18-instruments.js`): `INSTRUMENTS` (21: woodwinds, brass, strings, guitar and bass, piano, four voices) with sounding ranges, transpositions, clefs and General MIDI programs. `Instruments.written(m, 'altoSax')`, `sounding`, `writtenKey('E♭', 'clarinet')` → `'F'`, `checkRange(notes, inst, { bpm, meter })` → sentences like "Bar 3: the B♭2 is below the alto sax’s lowest note, D♭3 (sounding).", `transposeEvents(events, semis, keySig)` and `part(events, inst, keySig)` → `{ events, keySig, clef }` for a written part.
+
+`playSketch(s)` also plays `parts` and `voices`, and with `s.backing = { style }` (or `playSketch(s, { backing })`) has that band play the chords; `stopSketch()` stops it.
 
 ## Shared components
 
