@@ -232,7 +232,7 @@ const H = require('./helpers');
   t.check(nextOn(), 'boss part 3: sequence, inversion and retrograde all played');
   M.Tasks.playSeq = playSeq;
   t.next(); await wait(60);
-  const doneText = $('.stage').textContent;
+  const doneText = $('#view').textContent;
   t.check(M.Store.data.units['6.B'].done && /Level 6 passed\./.test(doneText) && /Level 7, Colours, is on its way/.test(doneText), 'passing the boss passes Level 6 and names Level 7 as next');
 
   // ---------- Ear Gym and Daily Set ----------
