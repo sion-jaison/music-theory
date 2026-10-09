@@ -333,9 +333,11 @@ function renderSketchbook(arg) {
       Store.save(); renderSketchbook();
     };
   }
+  /* a sketch playing with its band stops when you leave */
+  cleanup = () => { if (typeof stopSketch === 'function') stopSketch(); };
   view.querySelectorAll('.sketch').forEach(row => {
     const s = list.find(x => x.id === row.dataset.id);
-    row.querySelector('[data-act="play"]').onclick = () => playSketch(s);
+    row.querySelector('[data-act="play"]').onclick = () => { if (typeof stopSketch === 'function') stopSketch(); playSketch(s); };
     const art = row.querySelector('.sk-art');
     row.querySelector('[data-act="see"]').onclick = () => { if (art.hidden) art.innerHTML = sketchArt(s); art.hidden = !art.hidden; };
     const mb = row.querySelector('[data-act="midi"]'); if (mb) mb.onclick = () => MidiFile.download(s);

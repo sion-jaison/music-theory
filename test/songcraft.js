@@ -82,8 +82,13 @@ const H = require('./helpers');
   t.check(/end on I/.test($('.prompt').textContent) && host.querySelector('.sd input[type="text"]').value === 'Travel v2' && $$('.cs-slot b').map(b => b.textContent).join(' ') === 'I V7/V', 'version 2 reloads the chords, the melody and the review note');
   t.click(host.querySelector('.cs-slot[data-b="1"]'));
   pal('V').click();
+  /* the band: opens with the flavour's style, follows chord changes, and its style is saved */
+  const band = $('.sd-band');
+  band.open = true; band.dispatchEvent(new w.Event('toggle')); await wait(20);
+  t.check(!!$('.sd-band-ui .bk') && $('.sd-band-ui [data-bk="style"]').value === 'pop', 'Play it with a band opens a pop band for a Song flavour project');
   $('[data-act="save"]').click();
   t.check(M.Store.data.sketches[0].version === 2 && pr.v2 === M.Store.data.sketches[0].id && M.Store.data.sketches[0].from === sk.id, 'version 2 saves linked to the draft');
+  t.check(M.Store.data.sketches[0].backing && M.Store.data.sketches[0].backing.style === 'pop', 'the band’s style is saved with the sketch');
   clean();
   t.check(M.ChordIn.users === 0, 'chord input released');
   t.finish();

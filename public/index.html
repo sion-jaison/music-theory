@@ -8965,11 +8965,12 @@ Tasks.songDraft = (el, p, done) => {
   const seed = pr && !draft && pr.seed ? sketchById(pr.seed) : null;
   const key = (draft && draft.key) || p.key || (seed && sketchKey(seed)) || 'C';
   const melodyMode = p.melody || 'capture', min = p.min == null ? 8 : p.min, id = 'sd-name-' + Math.random().toString(36).slice(2, 7);
-  let saved = false, cap = null, timers = [];
+  let saved = false, cap = null, timers = [], band = null, bandUsed = false;
   el.innerHTML = `<div class="sd">${p.prompt ? `<p class="prompt">${p.prompt}${draft && draft.review && draft.review.note ? ` Your note to yourself: “${esc(draft.review.note)}”` : ''}</p>` : ''}
     <div class="eyebrow">Chords · ${esc(key)} ${mode === 'minor' ? 'minor' : mode === 'major' ? 'major' : esc(mode)} · ${M.label}</div><div class="sd-sheet"></div>
     ${melodyMode === 'none' ? '' : `<div class="eyebrow" style="margin-top:10px">${melodyMode === 'given' ? 'The melody' : 'Melody'}</div>`}<div class="sd-mel"></div>
     <div class="row sd-play"><button type="button" class="btn" data-act="hear">▶ Play it all</button>${melodyMode === 'capture' ? '<label class="toggle"><input type="checkbox" data-sd="backing" checked> Chords while I record</label>' : ''}</div>
+    ${typeof Backing !== 'undefined' ? '<details class="sd-band"><summary>Play it with a band</summary><div class="sd-band-ui"></div></details>' : ''}
     <ul class="nt-checks sd-checks"></ul>
     <div class="field"><label for="${id}">Name it</label><input id="${id}" type="text" maxlength="40" value="${esc(draft ? draft.name.replace(/( v2)?$/, ' v2') : p.name || '')}" placeholder="Give it a name"></div>
     <div class="row"><button type="button" class="btn primary" data-act="save" disabled>Save to sketchbook</button></div><p class="fb info sd-saved" aria-live="polite"></p></div>`;
@@ -8998,6 +8999,7 @@ Tasks.songDraft = (el, p, done) => {
   }
   function refresh() {
     if (melodyMode !== 'none') sheet.setMelody(melBeats());
+    bandSync();
     const c = ctx(), n = c.notes.length, msg = p.check ? p.check(c) : null;
     const items = [`<li class="${sheet.full ? 'ok' : ''}">${sheet.full ? '✓' : '○'} A chord in every bar</li>`];
     if (melodyMode === 'capture') items.push(`<li class="${n >= min ? 'ok' : ''}">${n >= min ? '✓' : '○'} At least ${min} melody notes (${n} so far)</li>`);
@@ -9018,6 +9020,16 @@ Tasks.songDraft = (el, p, done) => {
   } else if (melodyMode === 'given') {
     el.querySelector('.sd-mel').innerHTML = `<div class="nt-box">${Score.svg(p.given, { meter, keySig: csSig(key, mode) })}</div>`;
   }
+  /* the band: a backing style for the chords (and the melody on top); the style chosen is saved with the sketch */
+  const FLAVOUR_STYLE = { song: 'pop', jazz: 'swing', classical: 'ballad', film: 'ambient' };
+  const bandEl = el.querySelector('.sd-band');
+  if (bandEl) bandEl.addEventListener('toggle', () => {
+    if (!bandEl.open || band) return;
+    const pref = (draft && draft.backing && draft.backing.style) || p.style || FLAVOUR_STYLE[(pr && pr.flavour) || ''] || 'pop';
+    band = Backing.ui(bandEl.querySelector('.sd-band-ui'), { style: Backing.styleFor ? Backing.styleFor(meter, pref) : pref, chords: sheet.chords, melody: melBeats(), bpm: cap ? cap.bpm : bpm, meter, key, mode: mode === 'minor' ? 'minor' : 'major', note: 'Mute a part to hear what it adds. The style you leave set is saved with the sketch.' });
+    bandUsed = true;
+  });
+  function bandSync() { if (band && band.setChords && sheet.full) { try { band.setChords(sheet.chords); } catch (e) { /* keep playing the old chords */ } } }
   el.querySelector('[data-act="hear"]').onclick = () => {
     const t = cap ? cap.bpm : bpm;
     csPlay(sheet.chords, melBeats(), t);
@@ -9031,14 +9043,14 @@ Tasks.songDraft = (el, p, done) => {
       bpm: b, key, mode, level: sv.level || p.level, tags: (sv.tags || p.tags || []).concat(fl ? [fl.name.toLowerCase()] : []), prompt: sv.prompt || p.prompt || '',
       from: draft ? draft.id : (pr && pr.seed) || undefined
     }, cap || melodyMode === 'given' ? { score: Object.assign({ meter, bpm: b, keySig: csSig(key, mode), events: cap ? cap.events : Score.parse(p.given) }, swing > 0.52 ? { swing } : {}) } : {},
-    pr ? { project: p.project, version: p.version || 1 } : {}));
+    pr ? { project: p.project, version: p.version || 1 } : {}, band && bandUsed ? { backing: { style: band.style } } : {}));
     if (pr) { pr[p.version === 2 ? 'v2' : 'draft'] = sketch.id; Store.save(); }
     saved = true; bSave.disabled = true;
     fb(f, 'good', `Saved “${sketch.name}” to your sketchbook.`);
     done(true, { sketch });
   };
   refresh();
-  return () => { timers.forEach(clearTimeout); sheet.destroy(); if (cap) cap.destroy(); };
+  return () => { timers.forEach(clearTimeout); if (band) band.destroy(); sheet.destroy(); if (cap) cap.destroy(); };
 };
 
 /* =================================================================
@@ -13562,9 +13574,11 @@ function renderSketchbook(arg) {
       Store.save(); renderSketchbook();
     };
   }
+  /* a sketch playing with its band stops when you leave */
+  cleanup = () => { if (typeof stopSketch === 'function') stopSketch(); };
   view.querySelectorAll('.sketch').forEach(row => {
     const s = list.find(x => x.id === row.dataset.id);
-    row.querySelector('[data-act="play"]').onclick = () => playSketch(s);
+    row.querySelector('[data-act="play"]').onclick = () => { if (typeof stopSketch === 'function') stopSketch(); playSketch(s); };
     const art = row.querySelector('.sk-art');
     row.querySelector('[data-act="see"]').onclick = () => { if (art.hidden) art.innerHTML = sketchArt(s); art.hidden = !art.hidden; };
     const mb = row.querySelector('[data-act="midi"]'); if (mb) mb.onclick = () => MidiFile.download(s);
