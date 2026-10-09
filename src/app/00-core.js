@@ -130,8 +130,146 @@ const Sound = {
     notes.forEach(n => this.tone(n.m, t0 + n.t, n.d || 0.5, n.v || 0.8));
     const end = notes.reduce((e, n) => Math.max(e, n.t + (n.d || 0.5)), 0);
     return (t0 - ctx.currentTime + end) * 1000;
+  },
+
+  /* ---------- drum kit and pads (for the backing styles in 15-backing.js) ----------
+     All synthesized: the kick is a sine falling from 150 Hz; snare, hi-hat, ride and rim are white noise through
+     filters, with a short tone for the snare's body and the ride's ping. vel is 0–1. Like every Sound method they play
+     into this.master, so Sound.routed can send them through a loop's own gain node. Without noise buffers (very old
+     browsers) a square wave stands in for the noise. */
+  noiseBuf: null,
+  noise() {
+    const ctx = this.ctx;
+    if (!this.noiseBuf && ctx && ctx.createBuffer) {
+      const n = Math.floor(ctx.sampleRate * 1.5), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      this.noiseBuf = b;
+    }
+    return this.noiseBuf;
+  },
+  /* one burst of filtered noise. o: { type ('highpass'|'bandpass'|'lowpass'), freq, q, decay (s), vel } */
+  burst(t0, o) {
+    const ctx = this.ctx, buf = this.noise();
+    let src;
+    if (buf && ctx.createBufferSource) { src = ctx.createBufferSource(); src.buffer = buf; }
+    else { src = ctx.createOscillator(); src.type = 'square'; src.frequency.value = Math.min(9000, o.freq * 0.9); }
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = o.type; f.frequency.value = o.freq; if (f.Q) f.Q.value = o.q || 0.8;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, o.vel), t0 + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + o.decay);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    if (buf && src.buffer) src.start(t0, Math.random() * 1.2); else src.start(t0);
+    src.stop(t0 + o.decay + 0.03);
+  },
+  /* a short pitched blip with a falling pitch (kick, snare body, rim) */
+  blip(t0, type, f0, f1, fall, decay, vel) {
+    const ctx = this.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + fall);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vel), t0 + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+    o.connect(g); g.connect(this.master); o.start(t0); o.stop(t0 + decay + 0.03);
+  },
+  drumAt(when) {
+    const ctx = this.ensure(); if (!ctx) return null;
+    return Math.max(ctx.currentTime + 0.005, when == null ? ctx.currentTime : when);
+  },
+  kick(when, vel) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    const v = vel == null ? 0.9 : vel;
+    this.blip(t0, 'sine', 150, 42, 0.13, 0.34, v);
+    this.burst(t0, { type: 'lowpass', freq: 1800, decay: 0.02, vel: v * 0.18 });
+    this.busyUntil = Math.max(this.busyUntil, t0 + 0.3);
+  },
+  snare(when, vel) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    const v = vel == null ? 0.7 : vel;
+    this.blip(t0, 'triangle', 190, 140, 0.08, 0.12, v * 0.45);
+    this.burst(t0, { type: 'highpass', freq: 1500, decay: 0.19, vel: v * 0.42 });
+    this.busyUntil = Math.max(this.busyUntil, t0 + 0.2);
+  },
+  hat(when, vel, open) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    this.burst(t0, { type: 'highpass', freq: 7200, decay: open ? 0.32 : 0.05, vel: (vel == null ? 0.35 : vel) * 0.32 });
+    this.busyUntil = Math.max(this.busyUntil, t0 + (open ? 0.3 : 0.06));
+  },
+  ride(when, vel) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    const v = vel == null ? 0.4 : vel;
+    this.burst(t0, { type: 'bandpass', freq: 6400, q: 0.9, decay: 0.55, vel: v * 0.16 });
+    this.blip(t0, 'sine', 3150, 3050, 0.4, 0.45, v * 0.05);
+    this.busyUntil = Math.max(this.busyUntil, t0 + 0.4);
+  },
+  rim(when, vel) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    const v = vel == null ? 0.4 : vel;
+    this.blip(t0, 'triangle', 1750, 1600, 0.02, 0.05, v * 0.4);
+    this.burst(t0, { type: 'bandpass', freq: 3200, q: 1.4, decay: 0.035, vel: v * 0.3 });
+    this.busyUntil = Math.max(this.busyUntil, t0 + 0.06);
+  },
+  /* a soft pad chord: two slightly detuned oscillators per note through a low-pass, with a slow attack (seconds) */
+  pad(midis, when, dur, vel, attack) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    const ctx = this.ctx, list = [].concat(midis), v = (vel == null ? 0.4 : vel) * 0.3 / Math.sqrt(Math.max(1, list.length));
+    dur = Math.max(0.2, dur || 2);
+    const at = Math.min(attack == null ? 0.4 : attack, dur * 0.7);
+    list.forEach(m => {
+      const f = 440 * Math.pow(2, (m - 69) / 12), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = Math.min(4200, f * 4);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(v, t0 + at);
+      g.gain.setValueAtTime(v, t0 + dur);
+      g.gain.exponentialRampToValueAtTime(0.0005, t0 + dur + 0.9);
+      lp.connect(g); g.connect(this.master);
+      [[-7, 'sawtooth', 0.22], [6, 'triangle', 1]].forEach(([cents, type, amp]) => {
+        const o = ctx.createOscillator(), og = ctx.createGain();
+        o.type = type; o.frequency.value = f; if (o.detune) o.detune.value = cents; og.gain.value = amp;
+        o.connect(og); og.connect(lp); o.start(t0); o.stop(t0 + dur + 1);
+      });
+    });
+    this.busyUntil = Math.max(this.busyUntil, t0 + dur + 0.5);
+  },
+  /* a round, plucked bass note: triangle and a little sawtooth through a closing low-pass */
+  bass(midi, when, dur, vel) {
+    const t0 = this.drumAt(when); if (t0 == null) return;
+    const ctx = this.ctx, f = 440 * Math.pow(2, (midi - 69) / 12), v = vel == null ? 0.7 : vel;
+    dur = Math.max(0.08, dur || 0.5);
+    const hold = Math.max(0.2, dur), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(Math.min(2400, f * 9), t0);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(200, f * 3), t0 + 0.18);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(v * 0.6, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(v * 0.32, t0 + 0.19);
+    g.gain.setValueAtTime(v * 0.32, t0 + hold);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + hold + 0.12);
+    lp.connect(g); g.connect(this.master);
+    [[1, 'triangle', 1], [1, 'sawtooth', 0.22], [2, 'sine', 0.3]].forEach(([mult, type, amp]) => {
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = type; o.frequency.value = f * mult; og.gain.value = amp;
+      o.connect(og); og.connect(lp); o.start(t0); o.stop(t0 + hold + 0.15);
+    });
+    this.busyUntil = Math.max(this.busyUntil, t0 + hold + 0.1);
+  },
+  /* Run fn with every Sound method playing into an OfflineAudioContext (or any other context) instead of the speakers:
+     Backing.render uses it to turn a backing into an AudioBuffer. The live context, master and mic gate are restored. */
+  offline(ctx, fn) {
+    const keep = { ctx: this.ctx, master: this.master, busy: this.busyUntil, ensure: this.ensure };
+    const m = ctx.createGain(); m.gain.value = 0.55; m.connect(ctx.destination);
+    this.ctx = ctx; this.master = m; this.ensure = () => ctx;
+    try { fn(m); } finally { this.ctx = keep.ctx; this.master = keep.master; this.busyUntil = keep.busy; this.ensure = keep.ensure; }
   }
 };
+
+/* One analyser frame (dB per bin, as an AnalyserNode gives it) → { a, m }: a is the chroma analysis (analyzeSpectrum in
+   pitch.js), m the best chord match (matchChord, with optional matchOpts such as { qualities }) or null.
+   Shared by the mic's chord listening and Transcribe. */
+function spectrumChord(db, sampleRate, fftSize, matchOpts) {
+  const a = analyzeSpectrum(db, sampleRate, fftSize);
+  return { a, m: a ? matchChord(a.chroma, Object.assign({ bassPc: a.bassPc, played: a.played }, matchOpts || {})) : null };
+}
 
 /* =================================================================
    Listening: microphone, MIDI, computer keys, on-screen keys
@@ -216,8 +354,8 @@ const Mic = {
   chordTick(gate) {
     if (!this.an2) return;
     this.an2.getFloatFrequencyData(this.db);
-    const a = gate ? analyzeSpectrum(this.db, Sound.ctx.sampleRate, this.an2.fftSize) : null;
-    const m = a ? matchChord(a.chroma, { bassPc: a.bassPc, played: a.played }) : null;
+    const r = gate ? spectrumChord(this.db, Sound.ctx.sampleRate, this.an2.fftSize) : null;
+    const a = r ? r.a : null, m = r ? r.m : null;
     Bus.emit('chroma', a);
     /* The bass of one frame can flicker during the attack, so vote over the frames that matched this same chord
        (later frames weigh more; a tie goes to the root), and correct the event once the bass has settled. */

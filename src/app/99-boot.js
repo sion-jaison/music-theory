@@ -20,4 +20,6 @@ window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keybo
   Drone, Motive, MOTIVE_TOOLS, EarGym, EAR_SKILLS, spellIn, degreeOf, contourShape, motiveEvents, saveSketch, Score, MelodyCapture };
 /* intermediate song craft */
 Object.assign(window.Motif, { ChordSheet, SheetHas, csPlay, addListeningMap, LISTENING_MAPS, listeningThisWeek, listeningOpen, weekKey, projectOf, sketchById, levelUnlocked });
+/* the studio tools: backing styles, MIDI export, instrument data */
+Object.assign(window.Motif, { Backing, MidiFile, Instruments, INSTRUMENTS, playSketch });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
