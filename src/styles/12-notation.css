@@ -20,6 +20,8 @@
 .ntn .nt-bar { stroke: var(--ink); stroke-width: 1.3; }
 .ntn .nt-bar-end, .ntn .nt-pclef { fill: var(--ink); }
 .ntn .nt-clef { font-family: var(--f-music); fill: var(--ink); }
+.ntn .nt-cclef { fill: var(--ink); }
+.ntn .nt-cclef-l { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .ntn .nt-acc { font-family: var(--f-music); font-size: 34px; fill: var(--ink); }
 .ntn .nt-ts { font-family: var(--f-display); font-weight: 800; font-size: 21px; fill: var(--ink); }
 .ntn .nt-hd, .ntn .nt-flag, .ntn .nt-beam, .ntn .nt-dot, .ntn .nt-rest, .ntn .nt-tie { fill: var(--ink); }
