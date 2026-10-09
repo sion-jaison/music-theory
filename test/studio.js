@@ -210,6 +210,9 @@ const close = (a, b, eps) => Math.abs(a - b) <= (eps == null ? 1e-6 : eps);
   const dl = MF.download(sk1);
   t.check(dl.ok && clicked && clicked.name === 'Round-trip.mid' && clicked.href === 'blob:motif-test' && dl.bytes[0] === 0x4d, 'MIDI: download clicks a temporary link named Round-trip.mid');
   t.w.HTMLAnchorElement.prototype.click = origClick;
+  /* without object URLs (as in jsdom) Transcribe falls back to its own clock; the media test below puts them back */
+  const stubUrl = on => { if (on) { t.w.URL.createObjectURL = () => 'blob:motif-test'; t.w.URL.revokeObjectURL = () => {}; } else { delete t.w.URL.createObjectURL; delete t.w.URL.revokeObjectURL; } };
+  stubUrl(false);
 
   /* ================= instruments ================= */
   const I = M.Instruments, byId = I.byId;
@@ -233,6 +236,181 @@ const close = (a, b, eps) => Math.abs(a - b) <= (eps == null ? 1e-6 : eps);
   t.check(I.transposeEvents(M.Score.parse('F♯4:q C♯5:q'), 2, 2).map(e => e.p).join() === 'G♯4,D♯5' && I.transposeSig(2, 2) === 4, 'instruments: D major up a whole step spells G♯ and D♯ in E major');
   const part = I.part(evs, 'tenorSax', -3);
   t.check(part.keySig === -1 && part.events[0].p === 'F5' && part.clef === 'treble', 'instruments: a tenor sax part of a melody in E♭ is in F, a 9th up');
+
+  /* ================= Transcribe: the pure parts ================= */
+  const TR = M.Transcribe;
+  const tone = (sr, secs, notes, amp) => { const x = new Float32Array(Math.round(sr * secs)); notes.forEach(m => { const f = 440 * Math.pow(2, (m - 69) / 12); for (let i = 0; i < x.length; i++) x[i] += (amp || 0.25) * (Math.sin(2 * Math.PI * f * i / sr) + 0.4 * Math.sin(4 * Math.PI * f * i / sr) + 0.15 * Math.sin(6 * Math.PI * f * i / sr)); }); return x; };
+  let ch = TR.chroma(tone(44100, 0.5, [60, 64, 67]), 44100);
+  const top3 = c => Array.from(c.chroma).map((v, i) => [v, i]).sort((x, y) => y[0] - x[0]).slice(0, 3).map(x => x[1]).sort((x, y) => x - y).join();
+  t.check(ch.chord && ch.chord.sym === 'C' && top3(ch) === '0,4,7', 'chroma: a synthesized C major triad (44.1 kHz) is C — ' + (ch.chord && ch.chord.sym));
+  ch = TR.chroma(tone(22050, 0.5, [45, 57, 60, 64, 67]), 22050);
+  t.check(ch.chord && ch.chord.sym === 'Am7' && ch.bassPc === 9, 'chroma: A C E G over a low A (22 kHz) is Am7 with A in the bass — ' + (ch.chord && ch.chord.sym));
+  t.check(TR.chroma(new Float32Array(8192), 22050).chord === null, 'chroma: silence is no chord');
+  const pk = TR.peaks(tone(8000, 1, [69], 0.5), 50);
+  t.check(pk.max.length === 50 && pk.max.every(v => v > 0.5 && v < 0.9) && pk.min.every(v => v < -0.5), 'peaks: one max and min per column');
+  /* smoothing: a one-frame blip disappears, a short gap joins the chord after it, and edges snap to the beat grid */
+  const fr = (seq) => seq.map((k, i) => ({ t: +(0.1 + i * 0.2).toFixed(2), m: k ? { root: { C: 0, G: 7, F: 5, A: 9 }[k[0]], quality: k.length > 1 ? 'min' : 'maj', score: 0.9 } : null }));
+  let sg = TR.smooth(fr(['C', 'C', 'C', 'C', 'C', 'C', 'G', 'C', 'C', 'C', 'C', 'C', null, null, null, 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G', 'G', null, null, null, null, null, null, null, null, null, null, 'Am', 'Am', 'Am', 'Am', 'Am', 'Am']));
+  t.check(sg.map(s => s.sym).join(' ') === 'C G Am' && close(sg[0].t, 0) && close(sg[0].d, 2.4, 1e-6) && close(sg[1].t, 2.4) && close(sg[1].d, 2.6, 1e-6), 'smooth: the G blip inside C is gone; the short gap before G joins G — ' + JSON.stringify(sg.map(s => [s.sym, s.t, s.d])));
+  t.check(close(sg[2].t, 7) && sg[2].d > 1, 'smooth: a long silence stays a gap (Am starts at 7 s)');
+  sg = TR.smooth(fr(['C', 'C', 'C', 'C', 'C', 'C', 'C', 'C', 'F', 'F', 'F', 'F', 'F', 'F', 'F', 'F', 'F', 'F']), { grid: 0.5, offset: 0.05 });
+  t.check(close(sg[0].t, 0.05) && close(sg[1].t, 1.55) && close(sg[1].d, 2), 'smooth: edges snap to a beat grid');
+  const sp = TR.spell([{ t: 0, d: 2, sym: 'A♯', rootPc: 10, q: 'maj', alts: [] }, { t: 2, d: 2, sym: 'F', rootPc: 5, q: 'maj', alts: [] }, { t: 4, d: 2, sym: 'C', rootPc: 0, q: 'maj', alts: [] }]);
+  t.check(sp.segments[0].sym === 'B♭' && sp.key.tonic === 'F' && sp.key.mode === 'major', 'spell: A♯ becomes B♭ in F major');
+  t.check(JSON.stringify(TR.loopOf(5, 2, 10)) === '{"a":2,"b":5}' && TR.loopOf(9.95, 12, 10).a === 9.75 && TR.loopOf(9.95, 12, 10).b === 10 && TR.loopOf(3, 3.1, 10).b - TR.loopOf(3, 3.1, 10).a >= 0.25 && TR.loopOf(null, 2, 10) === null, 'loop maths: ordered, inside the clip, at least a quarter second');
+  t.check(TR.wrap(5.2, { a: 2, b: 5 }) === 2 && TR.wrap(4, { a: 2, b: 5 }) === 4 && TR.wrap(7, null) === 7, 'loop maths: past B goes back to A');
+  const wv = TR.wav(Float32Array.from([0, 0.5, -0.5, 1, -1]), 8000), back = TR.parseWav(wv.buffer);
+  t.check(wv.length === 54 && back.sampleRate === 8000 && back.samples.length === 5 && Array.from(back.samples).every((v, i) => close(v, [0, 0.5, -0.5, 1, -1][i], 1e-4)) && TR.parseWav(new Uint8Array([1, 2, 3])) === null, 'WAV: written and read back; junk is not a WAV');
+  /* the practice track, rendered without Web Audio here, analysed end to end */
+  const pt = await TR.practice({ romans: ['I', 'vi', 'IV', 'V7/V', 'V'], key: 'G', bpm: 96, repeat: 1 });
+  const sug = TR.spell(TR.smooth(TR.frames(pt.samples, pt.sampleRate, { hop: 0.2 }), { hop: 0.2, grid: pt.grid, offset: pt.offset })).segments;
+  t.check(sug.map(s => s.sym).join(' ') === 'G Em C A7 D' && sug.every((s, i) => close(s.t, pt.answer[i].t, 0.01)), 'practice track G–Em–C–A7–D: every chord suggested, on its bar — ' + sug.map(s => s.sym + '@' + s.t).join(' '));
+
+  /* ================= Transcribe in the Toolbox ================= */
+  const chordBus = () => (M.Bus.h.chord ? M.Bus.h.chord.size : 0);
+  const busBefore = chordBus();
+  t.click('.nav [data-view="toolbox"]'); await t.wait(30);
+  t.check(t.$$('.tool-tabs button').length === 6 && t.$$('.studio-tabs button').length === 3, 'toolbox: six reference tabs and three Studio tabs');
+  t.click('[data-tab="transcribe"]'); await t.wait(30);
+  t.check(/Nothing is uploaded/.test(t.$('.tr-private').textContent) && t.$('.tr input[type="file"]').getAttribute('accept') === 'audio/*', 'transcribe: opens your own audio file, and says nothing is uploaded');
+  t.click('[data-tr="practice"]');
+  const waitFor = async (fn, ms) => { const end = Date.now() + (ms || 15000); while (Date.now() < end) { if (fn()) return true; await t.wait(50); } return false; };
+  t.check(await waitFor(() => t.$$('.tr-seg').length >= 8), 'transcribe: the practice track loads and the strip fills with suggestions');
+  t.check(t.$$('.tr-seg b').map(b => b.textContent).join(' ') === 'C Am F G C Am F G' && /C major/.test(t.$('[data-tr="status"]').textContent), 'transcribe: suggests C Am F G twice, probably in C major — ' + t.$$('.tr-seg b').map(b => b.textContent).join(' '));
+  t.check(t.$('.tr-seg.sel') && /Motif hears/.test(t.$('[data-tr="pick"]').textContent) && t.$('[data-tr="pick"] .tr-sug').textContent === 'C', 'transcribe: the first chord is selected, ready to confirm');
+  // confirm by playing it on the keys
+  t.pc('C'); t.pc('E'); t.pc('G'); await t.wait(40);
+  t.check(t.$$('.tr-seg.ok').length === 1 && /you played C/.test(t.$('[data-tr="status"]').textContent) && t.$('.tr-seg.sel').dataset.i === '1', 'transcribe: playing C E G confirms C and moves on to the next chord');
+  // a different chord first, then the suggested one
+  t.pc('D'); t.pc('F'); t.pc('A'); await t.wait(40);
+  t.check(/Use Dm/.test(t.$('[data-tp="yes"]').textContent) && t.$$('.tr-seg.ok').length === 1, 'transcribe: playing Dm offers “Use Dm” instead of confirming');
+  await t.wait(1700);
+  t.pc('A'); t.pc('C'); t.pc('E'); await t.wait(40);
+  t.check(t.$$('.tr-seg.ok').length === 2 && t.$$('.tr-cell b').map(b => b.textContent).join(' ') === 'C Am', 'transcribe: then playing A C E confirms Am; the chart reads C Am');
+  // Yes, that's it
+  t.click('[data-tp="yes"]'); await t.wait(20);
+  // another chord picked from the alternatives
+  const alt = t.$$('.tr-alt').find(b => b.textContent === 'Em');
+  t.check(!!alt, 'transcribe: other chords that fit are offered (Em among them)');
+  t.click(alt); await t.wait(20);
+  t.check(/Use Em/.test(t.$('[data-tp="yes"]').textContent), 'transcribe: tapping Em makes it the candidate');
+  t.click('[data-tp="yes"]'); await t.wait(20);
+  t.check(t.$$('.tr-cell b').map(b => b.textContent).join(' ') === 'C Am F Em', 'transcribe: the chart keeps what you chose: C Am F Em');
+  // loop and speed, on the clock (no media element here)
+  t.click('.tr-seg[data-i="5"]'); await t.wait(20);
+  t.check(/Looping 0:1[0-9]–0:1[0-9]/.test(t.$('[data-tr="loopinfo"]').textContent), 'transcribe: selecting a chord loops its bar — ' + t.$('[data-tr="loopinfo"]').textContent);
+  const sp2 = t.$('[data-tr="speed"]'); sp2.value = '50'; sp2.dispatchEvent(new t.w.Event('input'));
+  t.check(t.$('[data-tr="rate"]').textContent === '50%', 'transcribe: speed down to 50%');
+  t.click('[data-tr="play"]'); await t.wait(30);
+  const tm0 = t.$('[data-tr="time"]').textContent;
+  t.check(/Pause/.test(t.$('[data-tr="play"]').textContent) && /^0:1\d$/.test(tm0), 'transcribe: plays from the loop start — ' + tm0);
+  t.click('[data-tr="play"]');
+  t.click('[data-tr="clear"]'); await t.wait(20);
+  t.check(/Drag across/.test(t.$('[data-tr="loopinfo"]').textContent), 'transcribe: Clear loop');
+  t.click('[data-tr="setA"]'); t.click('[data-tr="setB"]'); await t.wait(20);
+  t.check(/Looping/.test(t.$('[data-tr="loopinfo"]').textContent), 'transcribe: Set A and Set B make a loop at the playhead');
+  t.$('[data-tr="nm"]').value = 'Practice chords';
+  t.click('[data-tr="save"]'); await t.wait(20);
+  let saved = M.Store.data.sketches[0];
+  t.check(saved && saved.name === 'Practice chords' && saved.tags.indexOf('transcription') >= 0 && saved.chords.map(c => c.sym).join() === 'C,Am,F,Em' && saved.chords[0].t === 0 && saved.key === 'C' && saved.mode === 'major' && saved.bpm === 92, 'transcribe: saves the chart to the sketchbook (chords from 0 s, key C major, tag transcription)');
+  t.check(/Saved “Practice chords”/.test(t.$('[data-tr="saved"]').textContent), 'transcribe: says it saved');
+
+  /* an audio file from the device: no decoder here, so the WAV reader opens it */
+  const wavBytes = TR.wav(pt.samples, pt.sampleRate);
+  const file = new t.w.File([wavBytes], 'my song.wav', { type: 'audio/wav' });
+  const host2 = t.d.createElement('div'); t.d.body.appendChild(host2);
+  let tr2 = TR.mount(host2, {});
+  await tr2.openFile(file);
+  t.check(await waitFor(() => tr2.segments.length === 5), 'file: a WAV from the device opens and gets five suggestions');
+  t.check(host2.querySelector('[data-tr="name"]').textContent === 'my song.wav' && host2.querySelector('[data-tr="nm"]').value === 'Transcription: my song' && tr2.segments.map(s => s.sym).join(' ') === 'G Em C A7 D', 'file: named after the file; G Em C A7 D suggested');
+  await tr2.openFile(new t.w.File([new Uint8Array([1, 2, 3, 4])], 'notes.txt', { type: 'text/plain' }));
+  t.check(/could not be opened/.test(host2.querySelector('[data-tr="status"]').textContent), 'file: something that is not audio gets a plain message');
+  tr2.destroy();
+  /* the media element path: the pitch is kept when slowed down */
+  const MP = t.w.HTMLMediaElement.prototype, keep = {};
+  ['play', 'pause'].forEach(k => { keep[k] = MP[k]; });
+  const desc = k => Object.getOwnPropertyDescriptor(MP, k);
+  ['paused', 'currentTime'].forEach(k => { keep[k] = desc(k); });
+  stubUrl(true);
+  MP.play = function () { this._on = true; this._at = Date.now(); return Promise.resolve(); };
+  MP.pause = function () { this._pos = this.currentTime; this._on = false; };
+  Object.defineProperty(MP, 'paused', { configurable: true, get() { return !this._on; } });
+  Object.defineProperty(MP, 'currentTime', { configurable: true, get() { return (this._pos || 0) + (this._on ? (Date.now() - this._at) / 1000 * (this.playbackRate || 1) : 0); }, set(v) { this._pos = v; this._at = Date.now(); } });
+  tr2 = TR.mount(host2, {});
+  await tr2.usePractice({ romans: ['I', 'IV'], key: 'D', repeat: 1 });
+  await waitFor(() => tr2.segments.length >= 2);
+  const media = tr2.player.media;
+  const sp3 = host2.querySelector('[data-tr="speed"]'); sp3.value = '75'; sp3.dispatchEvent(new t.w.Event('input'));
+  t.check(media && media.src === 'blob:motif-test' && media.playbackRate === 0.75 && media.preservesPitch === true, 'media: an <audio> element plays the clip at 75% with preservesPitch');
+  tr2.setLoop(0.5, 1.0); tr2.seek(0.5); tr2.play();
+  await t.wait(1200);
+  t.check(tr2.player.playing && tr2.time >= 0.5 && tr2.time < 1.0, 'media: the A–B loop wraps playback back to A — ' + tr2.time.toFixed(2));
+  tr2.pause();
+  t.check(!tr2.player.playing, 'media: pause');
+  tr2.destroy();
+  ['play', 'pause'].forEach(k => { MP[k] = keep[k]; });
+  ['paused', 'currentTime'].forEach(k => { if (keep[k]) Object.defineProperty(MP, k, keep[k]); else delete MP[k]; });
+  stubUrl(false);
+
+  /* ================= Tasks.transcribe ================= */
+  let res = null;
+  const host3 = t.d.createElement('div'); t.d.body.appendChild(host3);
+  const clean = M.Tasks.transcribe(host3, { prompt: 'Find the four chords.', need: 4, practice: { romans: ['I', 'V7/vi', 'vi', 'IV'], key: 'F', bpm: 100, repeat: 1 }, save: { level: 9, tags: ['9.9'] } }, (ok, r) => { res = Object.assign({ ok }, r); });
+  t.check(/Find the four chords/.test(host3.querySelector('.prompt').textContent), 'task: shows its prompt');
+  host3.querySelector('[data-tr="practice"]').click();
+  t.check(await waitFor(() => host3.querySelectorAll('.tr-seg').length === 4), 'task: the practice track (with a secondary dominant) loads');
+  t.check([...host3.querySelectorAll('.tr-seg b')].map(b => b.textContent).join(' ') === 'F A7 Dm B♭', 'task: suggests F A7 Dm B♭ (V/vi spelled in F) — ' + [...host3.querySelectorAll('.tr-seg b')].map(b => b.textContent).join(' '));
+  for (let i = 0; i < 3; i++) { host3.querySelector('[data-tp="yes"]').click(); await t.wait(20); }
+  t.check(host3.querySelector('[data-tr="save"]').disabled && /3 so far/.test(host3.querySelector('[data-tr="checks"]').textContent), 'task: three of four confirmed, so it cannot be saved yet');
+  t.pc('B♭'); t.pc('D'); t.pc('F'); await t.wait(40);
+  t.check(!host3.querySelector('[data-tr="save"]').disabled, 'task: the fourth chord, played on the keys, enables saving');
+  host3.querySelector('[data-tr="save"]').click(); await t.wait(20);
+  t.check(res && res.ok && res.chords.length === 4 && res.sketch.level === 9 && res.sketch.tags.join() === 'transcription,9.9' && res.sketch.key === M.Theory.findKey(res.chords)[0].tonic && res.chords.map(c => c.sym).join() === 'F,A7,Dm,B♭', 'task: done(true, { chords, sketch }) with the level, tags and the key the chords suggest (' + (res && res.sketch.key + ' ' + res.sketch.mode) + ')');
+  clean();
+  t.check(chordBus() === busBefore + (t.$('.tool-body .tr') ? 1 : 0), 'task: cleanup removes its chord listener');
+
+  /* ================= playSketch with parts, voices and a backing ================= */
+  calls.length = 0;
+  const unspy2 = ['tone', 'kick', 'hat', 'bass', 'chord'].map(spy);
+  let ms = M.playSketch({ bpm: 120, notes: [{ m: 72, t: 0, d: 0.5 }], parts: [{ name: 'Counter', notes: [{ m: 64, t: 0, d: 0.5 }, { m: 65, t: 0.5, d: 0.5 }] }, { name: 'Kit', channel: 10, notes: [{ m: 36, t: 0, d: 0.1 }] }], voices: { S: [{ m: 76, t: 0, d: 1 }], B: [{ m: 48, t: 0, d: 1 }] } });
+  t.check(ms > 0 && of('tone').length === 5 && of('kick').length === 1, 'playSketch: melody, every part (drum part on the kit) and every voice');
+  M.stopSketch();
+  calls.length = 0;
+  ms = M.playSketch({ bpm: 240, notes: [{ m: 72, t: 0, d: 0.25 }], chords: [{ sym: 'C', t: 0, d: 1 }, { sym: 'G', t: 1, d: 1 }], backing: { style: 'pop' } });
+  await t.wait(400);
+  t.check(ms > 1900 && of('kick').length >= 3 && of('bass').length >= 4 && of('tone').filter(x => x.args[0] === 72).length === 1, 'playSketch: with backing: { style } a pop band plays the chords under the melody');
+  M.stopSketch();
+  await t.wait(300);
+  const n0 = calls.length; await t.wait(1200);
+  t.check(calls.length === n0, 'stopSketch stops the band');
+  unspy2.forEach(f => f());
+
+  /* ================= the Toolbox's other Studio tabs ================= */
+  t.click('[data-tab="export"]'); await t.wait(30);
+  t.check(t.$$('.ex-item').length === M.Store.data.sketches.length && t.$$('.ex-item').length >= 2, 'export: every sketch listed with a Download button');
+  clicked = null; stubUrl(true);
+  t.w.HTMLAnchorElement.prototype.click = function () { clicked = { name: this.download }; };
+  const band = t.$('#ex-band'); band.value = 'bossa'; band.dispatchEvent(new t.w.Event('change'));
+  t.click('[data-ex="1"]'); await t.wait(20);
+  t.check(clicked && /\.mid$/.test(clicked.name) && /Saved/.test(t.$('[data-ex-fb]').textContent), 'export: Download MIDI saves a .mid file — ' + (clicked && clicked.name));
+  t.w.HTMLAnchorElement.prototype.click = origClick; stubUrl(false);
+  t.click('[data-tab="instruments"]'); await t.wait(30);
+  const ins = t.$('#in-id'); ins.value = 'altoSax'; ins.dispatchEvent(new t.w.Event('change')); await t.wait(10);
+  t.check(/major 6th lower/.test(t.$('.tool-out').textContent) && /written in C major/.test(t.$('.tool-out').textContent) && /D♭3–A5/.test(t.$('.tool-out').textContent), 'instruments: alto sax sounds a major 6th lower; concert E♭ is written in C');
+  t.click('[data-tab="progressions"]'); await t.wait(30);
+  const prb = t.$('#pr-band'); prb.value = 'swing'; prb.dispatchEvent(new t.w.Event('change')); await t.wait(10);
+  t.check(/walking bass/.test(t.$('.tool-out').textContent), 'progressions: a band can play the progression (swing)');
+  calls.length = 0;
+  const unspy3 = ['ride'].map(spy);
+  t.click('.tool-out [data-act="play"]'); await t.wait(500);
+  t.check(of('ride').length > 0 && t.$$('.prog-chord.on').length === 1, 'progressions: the band plays and lights the chord');
+  t.click('.tool-out [data-act="stop"]'); unspy3.forEach(f => f());
+  prb.value = 'plain'; prb.dispatchEvent(new t.w.Event('change'));
+  /* every tab opens cleanly */
+  for (const b of t.$$('.tool-tabs button, .studio-tabs button')) { t.click(`[data-tab="${b.dataset.tab}"]`); await t.wait(30); }
+  t.check(t.$$('.tool-tabs button, .studio-tabs button').length === 9 && t.$('.tool-body').children.length > 0, 'toolbox: all nine tabs open');
+  t.click('.nav [data-view="home"]'); await t.wait(30);
+  t.check(chordBus() === busBefore && !t.$('.tool-body .tr'), 'leaving the toolbox leaves no chord listener behind');
 
   t.finish();
 })();

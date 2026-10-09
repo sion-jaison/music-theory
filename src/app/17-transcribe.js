@@ -133,7 +133,9 @@ function trSmooth(frames, o) {
     segs.forEach((x, i) => { if (x.n < minN && (s < 0 || x.n < segs[s].n)) s = i; });
     if (s < 0) break;
     const L = segs[s - 1], R = segs[s + 1], x = segs[s];
-    const into = !L ? R : !R ? L : (L.k === R.k ? L : (L.k && !R.k) ? L : (!L.k && R.k) ? R : (L.n >= R.n ? L : R));
+    /* a short gap goes to the chord after it (its attack, missed); a short chord to the same chord around it, else the
+       longer neighbour */
+    const into = !L ? R : !R ? L : (!x.k && R.k) ? R : (L.k === R.k ? L : (L.k && !R.k) ? L : (!L.k && R.k) ? R : (L.n >= R.n ? L : R));
     into.n += x.n; if (into === R) into.i = x.i;
     segs.splice(s, 1);
     /* the neighbours may now be the same chord: join them */
@@ -542,13 +544,11 @@ function trMount(el, o) {
     if (ev.source === 'mic' && player && player.playing) return;   /* the mic would hear the recording itself */
     if (sel < 0) { const tm = player ? player.time : 0, at = segs.findIndex(s => tm >= s.t && tm < s.t + s.d); select(at >= 0 ? at : 0, true); }
     const s = segs[sel]; if (!s || !ev.sym) return;
-    const target = cand || s.sym;
-    if (chordHit(ev, chordTarget(target))) {
-      const i = sel;
-      confirm(i, target);
-      const f2 = pickEl.querySelector('[data-tp="fb"]');
-      if (f2) fb(f2, 'good', `You played ${Theory.pretty(target)} too. Confirmed.`);
-      else say('good', `You played ${Theory.pretty(target)} too. Confirmed.`);
+    /* the suggestion, or the chord picked instead of it: playing either confirms it */
+    const target = [s.sym, cand].filter(Boolean).find(x => { try { return chordHit(ev, chordTarget(x)); } catch (e) { return false; } });
+    if (target) {
+      confirm(sel, target);
+      say('good', `${trClock(s.t)}: you played ${Theory.pretty(target)}${target === s.sym ? ', the chord Motif heard' : ''}. Confirmed.`);
     } else {
       cand = ev.sym.replace(/\/.*$/, '');
       paint();
