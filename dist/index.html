@@ -9863,6 +9863,9 @@ function renderDaily() {
   }
   const steps = [
     function tune() {
+      /* a level can bring its own tune-in: tune: { title, sub, task, params } */
+      const tl = levelByN(currentLevel()), tn = inter && tl && tl.tune && Tasks[tl.tune.task] ? tl.tune : null;
+      if (tn && Math.random() < (tn.share == null ? 0.5 : tn.share)) { const f = frame(tn.title, tn.sub || ''); cleanup = Tasks[tn.task](f.body, Object.assign({}, typeof tn.params === 'function' ? tn.params() : tn.params), () => f.ready()); return; }
       if (inter) { const f = frame('Tune in over a drone', 'The drone sets the key. Sing or play the three degrees it asks for, in any octave.'); cleanup = Tasks.droneTune(f.body, {}, () => f.ready()); return; }
       const f = frame('Match three notes', 'Listen, then play or sing the same note. Any octave counts.');
       const zone = Store.data.range;
