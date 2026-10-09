@@ -1,0 +1,39 @@
+/* Listening Maps, the chord sheet and the song draft */
+.lm-head h3.lm-song { font-family: var(--f-display); font-size: 22px; margin: 2px 0 4px; }
+.lm-head .muted { font-weight: 500; font-size: 16px; }
+.lm-intro { margin: 0 0 4px; }
+.lm-qs { margin: 12px 0 0; padding-left: 22px; display: grid; gap: 12px; }
+.lm-q p { margin: 0 0 6px; font-weight: 700; }
+.lm-q .fb { margin: 6px 0 0; }
+
+.cs { display: grid; gap: 10px; }
+.cs-bar-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.cs-bar { display: grid; align-content: start; gap: 4px; padding: 6px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); min-width: 0; }
+.cs-bar.locked { background: var(--surface-2); }
+.cs-bar-n { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; min-width: 0; }
+.cs-bar-n small { font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
+.cs-key { font-family: var(--f-mono); font-size: 10px; color: var(--glow); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-slots { display: flex; gap: 4px; min-width: 0; }
+.cs-slot { flex: 1 1 0; min-width: 0; display: grid; justify-items: center; padding: 4px 2px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; }
+.cs-slot b { font-family: var(--f-display); font-weight: 800; font-size: 16px; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-slot span { font-family: var(--f-mono); font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-slot.empty b { color: var(--muted); }
+.cs-slot.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.cs-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cs-mel { display: flex; flex-wrap: wrap; gap: 2px; min-height: 18px; }
+.cs-mel .n { font-family: var(--f-mono); font-size: 10px; padding: 0 3px; border-radius: 4px; border: 1px solid var(--line); }
+.cs-mel .n.ct { background: var(--good-soft); border-color: var(--good); }
+.cs-mel .n.nct { background: var(--accent-soft); border-color: var(--accent); }
+.cs-mel .n.out { background: var(--bad-soft); border-color: var(--bad); }
+.cs-mel .n.strong { font-weight: 800; }
+.cs-mel .n.strong.nct, .cs-mel .n.strong.out { text-decoration: underline; }
+.cs-pal { gap: 6px; }
+.cs-pal .choice small { font-family: var(--f-mono); font-size: 11px; color: var(--muted); margin-left: 2px; }
+.cs-acts { gap: 8px; align-items: end; }
+.cs-keysel select { max-width: 160px; }
+.cs-hint { margin: 0; }
+.sd .nt-box { margin-top: 6px; }
+.sd-play { margin-top: 8px; }
+@media (max-width: 560px) {
+  .cs-bar-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

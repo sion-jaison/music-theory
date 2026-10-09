@@ -21,6 +21,9 @@ src/app/*.js           the app, concatenated in name order inside one strict-mod
   13-intermediate.js   intermediate pieces: Drone and key context, Tasks.degreeEar, the adaptive EarGym (addEarSkill),
                        Motive tools and Tasks.variationLab, contour, and the project steps (projectSetup, projectDraft,
                        review, compare)
+  19-songcraft.js      Listening Maps (addListeningMap, Tasks.listeningMap: real songs by title only), the chord sheet
+                       (ChordSheet: chords per bar or half bar as Roman numerals, key changes, the melody's fit; SheetHas
+                       questions for checks) and Tasks.songDraft (chords plus a melody; drafts and version 2 for projects)
   20-level1.js … 60-level5.js   one file per level: its tasks, units, review cards, Daily Set ear and create config
   62-level6-rhythm.js, 63-level6.js   Level 6 (units 6.1–6.4 in the first file, the rest and addLevel in the second)
   80-progress.js       units done, level unlocks, review scheduling, sketches, streak, personal bests
