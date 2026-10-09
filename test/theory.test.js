@@ -125,5 +125,64 @@ eq(T.progression(['ii7', 'V7', 'Imaj7'], 'C').map(c => c.sym), ['Dm7', 'G7', 'Cm
 eq(T.progression(['i', 'VI', 'III', 'VII'], 'A', 'minor').map(c => c.sym), ['Am', 'F', 'C', 'G'], 'epic minor in A');
 eq(T.PROGRESSIONS.every(p => T.progression(p.romans, p.mode === 'minor' ? 'A' : 'C', p.mode).length === p.romans.length), true, 'every built-in progression realizes');
 
+// modes
+eq(T.MODES.map(m => m.id), ['lydian', 'ionian', 'mixolydian', 'dorian', 'aeolian', 'phrygian', 'locrian'], 'modes from brightest to darkest');
+eq(T.MODES.slice(1).every((m, i) => m.degrees.filter((d, k) => d !== T.MODES[i].degrees[k]).length === 1), true, 'each mode lowers exactly one note of the one before');
+eq(j(T.scale('D', 'dorian')), 'D E F G A B C', 'D Dorian is the white keys from D');
+eq(j(T.scale('E', 'phrygian')), 'E F G A B C D', 'E Phrygian');
+eq(j(T.scale('F', 'lydian')), 'F G A B C D E', 'F Lydian');
+eq(j(T.scale('A', 'mixolydian')), 'A B C♯ D E F♯ G', 'A Mixolydian keeps the major 3rd, lowers the 7th');
+eq(T.MODES.every(m => j(T.scale(T.scale('C')[m.parent - 1], m.id)).split(' ').sort().join() === T.scale('C').slice().sort().join()), true, 'every mode starting on its parent degree of C uses the white keys');
+eq(T.modeChords('G', 'mixolydian').map(c => c.roman), ['I', 'ii', 'iii°', 'IV', 'v', 'vi', '♭VII'], 'Mixolydian chords with ♭VII');
+eq(T.modeChords('D', 'dorian').map(c => c.sym).slice(0, 4), ['Dm', 'Em', 'F', 'G'], 'Dorian: i ii ♭III IV, the major IV');
+
+// extended chords
+eq(j(T.chordNotes('C', '9')), 'C E G B♭ D', 'C9');
+eq(j(T.chordNotes('D', 'm7')), 'D F A C', 'Dm7');
+eq(j(T.chordNotes('F', 'maj7#11')), 'F A C E B', 'Fmaj7♯11, the Lydian chord');
+eq(T.parseChord('C6/9'), { root: 'C', q: '69', bass: null }, '6/9 parses (the slash is not a bass note)');
+eq(T.parseChord('Am(add9)/C').q, 'madd9', 'm(add9) over a bass');
+eq(T.CHORDS['13'].recipe, '4 + 3 + 3 + 4 + 7', 'recipes are filled in for the new chords');
+eq(T.identify([0, 4, 7, 9], 0).map(x => x.sym), ['Am7'], 'recognition sticks to core chords by default');
+eq(T.identify([0, 4, 7, 9], 0, T.EXT_QS).map(x => x.sym), ['C6', 'Am7'], '…and hears C6 when asked for extensions');
+eq(j(T.quartal('D4', 4)), 'D4 G4 C5 F5', 'a quartal stack');
+eq(T.CHORD_SCALES.m7[0] + ' ' + T.CHORD_SCALES['7'][0] + ' ' + T.CHORD_SCALES.m7b5[0], 'dorian mixolydian locrian', 'chord–scale choices');
+
+// compound intervals and inversion
+eq(T.interval('C4', 'D5').name, 'major 9th', 'C4 to D5 is a major 9th');
+eq(T.interval('C4', 'F5').name, 'perfect 11th', 'C4 to F5 is a perfect 11th');
+eq(['M3', 'm6', 'P4', 'A4', 'm2', 'P8', 'M10'].map(T.invertInterval), ['m6', 'M3', 'P5', 'd5', 'M7', 'P1', 'm6'], 'inversions add to 9; major ↔ minor, augmented ↔ diminished');
+eq(['M9', 'P11', 'M13', 'm3'].map(T.simpleInterval), ['M2', 'P4', 'M6', 'm3'], 'compound to simple');
+
+// Roman numerals: inversions, applied, borrowed, Neapolitan, augmented sixths
+const rc = (r, k, m) => { const c = T.romanChord(r, k, m); return c.sym; };
+eq(['I6', 'I64', 'V65', 'V43', 'V42', 'ii65'].map(r => rc(r, 'C')), ['C/E', 'C/G', 'G7/B', 'G7/D', 'G7/F', 'Dm7/F'], 'inversion figures');
+eq(['V7/V', 'V/vi', 'V7/IV', 'vii°7/V', 'V7/ii'].map(r => rc(r, 'C')), ['D7', 'E', 'C7', 'F♯°7', 'A7'], 'applied chords in C');
+eq(['vii°', 'vii°7', 'V7', 'V7/iv'].map(r => rc(r, 'A', 'minor')), ['G♯°', 'G♯°7', 'E7', 'A7'], 'minor keys use the raised leading tone for vii°');
+eq(['bVI', 'bVII', 'bIII', 'iv', 'ii°'].map(r => rc(r, 'C')), ['A♭', 'B♭', 'E♭', 'Fm', 'D°'], 'borrowed chords in C');
+eq(rc('N6', 'C', 'minor') + ' ' + rc('subV7', 'C'), 'D♭/F D♭7', 'Neapolitan 6 and tritone substitute');
+eq(['It+6', 'Fr+6', 'Ger+6'].map(r => j(T.romanChord(r, 'C').notes)), ['A♭ C F♯', 'A♭ C D F♯', 'A♭ C E♭ F♯'], 'augmented sixths, spelled with F♯');
+const ro = (s, k, m) => T.romanOf(s, k, m);
+eq(['G7', 'D7', 'E', 'F♯°7', 'A♭', 'B♭', 'Fm', 'D♭/F', 'D♭7', 'G7/B', 'C/G', 'A♭(Ger+6)', 'G9'].map(s => ro(s, 'C')),
+  ['V7', 'V7/V', 'V/vi', 'vii°7/V', '♭VI', '♭VII', 'iv', 'N6', 'subV7', 'V65', 'I64', 'Ger+6', 'V7'], 'analysis in C major');
+eq(['E', 'E7', 'G♯°7', 'A', 'D', 'B7', 'C', 'B♭/D'].map(s => ro(s, 'A', 'minor')), ['V', 'V7', 'vii°7', 'I', 'IV', 'V7/V', 'III', 'N6'], 'analysis in A minor (Picardy I, Dorian IV)');
+eq(T.PROGRESSIONS.filter(p => !p.mode && p.id !== 'blues').every(p => T.progression(p.romans, 'G').every((c, i) => ro(c.sym, 'G') === p.romans[i])), true, 'analysis inverts realization for every built-in major progression');
+eq(ro('G7', 'G'), 'V7/IV', 'out of context, a blues I7 reads as V7/IV');
+
+// key finding
+eq(T.findKey(['G', 'A', 'B', 'C', 'D', 'E', 'F♯', 'G', 'D', 'B', 'G'])[0].name, 'G major', 'key finder: G major tune');
+eq(T.findKey(['A', 'B', 'C', 'D', 'E', 'F', 'G♯', 'A', 'E', 'C', 'A'])[0].name, 'A minor', 'key finder: A harmonic minor tune');
+eq(T.findKey(T.progression(['I', 'IV', 'V7', 'I'], 'E♭').map(c => ({ sym: c.sym, d: 2 })))[0].name, 'E♭ major', 'key finder from chords');
+const seg = (romans, key) => T.progression(romans, key).map(c => c.notes.map(n => n));
+const trackNotes = [];
+let at = 0;
+[['I', 'IV', 'V', 'I', 'vi', 'ii', 'V', 'I'], ['I', 'IV', 'V7', 'I', 'vi', 'IV', 'V7', 'I']].forEach((romans, k) => {
+  T.progression(romans, k ? 'G' : 'C').forEach(c => { c.notes.forEach(n => trackNotes.push({ t: at, d: 2, p: n })); at += 2; });
+});
+const tr = T.keyTrack(trackNotes, { win: 8, hop: 2, hold: 2 });
+eq(tr.map(x => x.name), ['C major', 'G major'], 'key track hears C major, then a move to G major');
+eq(tr[1].from >= 10 && tr[1].from <= 20, true, `the move to G lands near the half-way point (at ${tr[1].from} of 32)`);
+eq(T.relatedKeys('C').map(k => k.tonic + ' ' + k.mode).join(', '), 'F major, G major, D minor, A minor, E minor', 'closely related keys of C');
+
 console.log(fails ? `\n${fails} failing` : '\nall passing');
 process.exit(fails ? 1 : 0);

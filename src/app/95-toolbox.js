@@ -24,7 +24,25 @@ const CHORD_HOOKS = {
   maj7: 'A major chord plus a major 7th (4 + 3 + 4): soft and dreamy.',
   m7: 'A minor chord plus a minor 7th (3 + 4 + 3): mellow; the ii in ii–V–I.',
   m7b5: 'A diminished triad plus a minor 7th (3 + 3 + 4): the vii in a major key.',
-  dim7: 'Three minor 3rds stacked (3 + 3 + 3): every note is the same distance apart.'
+  dim7: 'Three minor 3rds stacked (3 + 3 + 3): every note is the same distance apart.',
+  '6': 'A major chord plus the 6th: sweet and old-fashioned; the last chord of many swing tunes.',
+  m6: 'A minor chord plus a major 6th: dark but hopeful; the Dorian sound in one chord.',
+  add9: 'A major chord plus the 9th (the 2nd an octave up), no 7th: shimmering pop guitar.',
+  madd9: 'A minor chord plus the 9th: wistful, film-score minor.',
+  '69': 'A 6th and a 9th on a major chord: wide, open, jazz piano’s happy ending.',
+  '7sus4': 'A dominant 7th with the 4th instead of the 3rd: a V that floats instead of pulling.',
+  mMaj7: 'A minor chord with a major 7th: the spy-film chord.',
+  'maj7#5': 'An augmented chord with a major 7th: bright and strange.',
+  '7b5': 'A dominant 7th with a lowered 5th: two tritones; it is its own tritone substitute.',
+  '9': 'A dominant 7th plus the 9th: funk and blues; leave out the 5th on a guitar.',
+  maj9: 'A major 7th plus the 9th: lush, soft, neo-soul.',
+  m9: 'A minor 7th plus the 9th: smooth; the ii chord in jazz ballads.',
+  '7b9': 'A dominant 7th with a flat 9th: dark tension that pulls hard to a minor chord.',
+  '7#9': 'A dominant 7th with a sharp 9th, which clashes with the 3rd: gritty rock and blues.',
+  '11': 'A dominant chord with the 11th and no 3rd: a V that sounds like IV over the bass.',
+  m11: 'A minor 7th with the 9th and 11th: open, modal, all fourths when spread out.',
+  'maj7#11': 'A major 7th with a raised 11th: the Lydian colour, bright and floating.',
+  '13': 'A dominant 7th with the 13th (the 6th up an octave): big-band brass; drop the 11th.'
 };
 /* every memory hook in the plan, with the level that teaches it */
 const HOOKS = [
@@ -185,7 +203,7 @@ function toolScales(el) {
 function toolChords(el) {
   const st = Store.data.settings;
   let root = st.toolChordRoot || 'C', q = st.toolChordQ || 'maj', inv = 0;
-  el.innerHTML = `<div class="row tool-controls">${selectHTML('ch-root', 'Root', SPELLED_ROOTS.map(r => [r, r]), root)}${selectHTML('ch-q', 'Quality', Object.keys(Theory.CHORDS).map(k => [k, Theory.CHORDS[k].name]), q)}</div><div class="tool-out"></div><div class="try"></div>`;
+  el.innerHTML = `<div class="row tool-controls">${selectHTML('ch-root', 'Root', SPELLED_ROOTS.map(r => [r, r]), root)}${selectHTML('ch-q', 'Quality', Theory.EXT_QS.map(k => [k, Theory.CHORDS[k].name]), q)}</div><div class="tool-out"></div><div class="try"></div>`;
   const out = el.querySelector('.tool-out'), tryEl = el.querySelector('.try');
   let inner = null;
   function paint() {
@@ -201,7 +219,7 @@ function toolChords(el) {
     out.innerHTML = `<h2>${Theory.pretty(Theory.symbol(root, q, bass))} <span class="muted small">${root} ${C.name}${inv ? ', ' + invNames[inv] : ''}</span></h2>${noteChips(notes)}
       <table class="tbl"><tr><th>Recipe</th><td class="mono">${C.recipe} half steps</td></tr><tr><th>Degrees</th><td class="mono">${C.degrees.map(d => d.replace(/bb/g, '𝄫').replace(/b/g, '♭').replace(/#/g, '♯')).join(' ')}</td></tr></table>
       <div class="art">${Staff.svg({ clef: 'treble', notes: [staffNotes] })}</div>
-      <div class="hook">${CHORD_HOOKS[q]}</div>
+      <div class="hook">${CHORD_HOOKS[q] || ''}</div>
       <div class="row">${notes.map((n, i) => `<button type="button" class="btn small${i === inv ? ' primary' : ''}" data-inv="${i}">${i ? n + ' in the bass' : 'Root position'}</button>`).join('')}</div>
       <div class="row"><button type="button" class="btn small" data-act="play">▶ Play</button><button type="button" class="btn small" data-act="arp">▶ One at a time</button><button type="button" class="btn small primary" data-act="try">Play it yourself</button></div>`;
     Keyboard.clearMarks(); ms.forEach(m => Keyboard.mark(m, 'hint'));
