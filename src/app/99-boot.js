@@ -20,4 +20,6 @@ window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keybo
   Drone, Motive, MOTIVE_TOOLS, EarGym, EAR_SKILLS, spellIn, degreeOf, contourShape, motiveEvents, saveSketch, Score, MelodyCapture };
 /* intermediate song craft */
 Object.assign(window.Motif, { ChordSheet, SheetHas, csPlay, addListeningMap, LISTENING_MAPS, listeningThisWeek, listeningOpen, weekKey, projectOf, sketchById, levelUnlocked });
+/* voices: the voice-leading checker, multi-voice notation, the part-writing editor */
+Object.assign(window.Motif, { VoiceLead });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
