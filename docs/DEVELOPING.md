@@ -16,11 +16,14 @@ src/app/*.js           the app, concatenated in name order inside one strict-mod
   05-registry.js       LEVELS, ARC, CARD_DEFS, CARD_TYPES, addLevel()
   10-tasks.js          Level 1 tasks (climb, octave, findAll, playName, step, pulse, clapback, echo, motif, choice, card …)
   11-components.js     shared pieces: Staff, Circle, ChordIn, chordHit, chromaMeter, Tasks.quiz/playSeq/playChords
-  12-notation.js       rhythm and pitch notation (Score), quantizing taps and played notes, MelodyCapture and Tasks.capture,
-                       rhythm tasks for any meter (rhythmTap, rhythmDictation, meterFeel)
+  12-notation.js       rhythm and pitch notation (Score; clefs treble, bass, alto, tenor, perc), quantizing taps and played
+                       notes, MelodyCapture and Tasks.capture, rhythm tasks for any meter (rhythmTap, rhythmDictation, meterFeel)
   13-intermediate.js   intermediate pieces: Drone and key context, Tasks.degreeEar, the adaptive EarGym (addEarSkill),
                        Motive tools and Tasks.variationLab, contour, and the project steps (projectSetup, projectDraft,
                        review, compare)
+  14-voices.js         voices (Level 8 on): VoiceLead (the voice-leading and counterpoint checker, motion, intervals,
+                       nearestVoicing, realize, corrupt and plant), VoiceView (two or four voices in notation), PartWriter
+                       (the part-writing editor), Tasks.partWrite and Tasks.findErrors
   19-songcraft.js      Listening Maps (addListeningMap, Tasks.listeningMap: real songs by title only), the chord sheet
                        (ChordSheet: chords per bar or half bar as Roman numerals, key changes, the melody's fit; SheetHas
                        questions for checks) and Tasks.songDraft (chords plus a melody; drafts and version 2 for projects)
@@ -31,7 +34,7 @@ src/app/*.js           the app, concatenated in name order inside one strict-mod
   90-views.js          home, lesson, Daily Set, sketchbook, setup
   95-toolbox.js        Toolbox
   99-boot.js           start-up
-test/                  Node tests (theory, pitch, chord) and jsdom walkthroughs (smoke, rhythm, level2 … level5)
+test/                  Node tests (theory, pitch, chord) and jsdom walkthroughs (smoke, rhythm, notation, voices, level2 … level6)
 ```
 
 All `src/app` files share one scope, so a function or `const` defined in an earlier file is visible in later ones. Names must be unique across files. Function declarations are hoisted; `const` values are not, so top-level code may only use constants from earlier files.
@@ -122,6 +125,10 @@ Chords: call `ChordIn.start()` (and `ChordIn.stop()` in cleanup). Notes tapped w
 - **`Circle.svg(opts)` / `Circle.mount(el, opts, onPick(pos, ring))`**: the Circle of Fifths. Positions 0–11 clockwise from C. `selected`, `family` (light I IV V and ii vi iii), `hide` + `reveal` (blank clock for games), `marks` (`{ 3: 'ok', m3: 'no' }`; `m` prefix = inner ring), `ring: 'major'` (outer ring only), `center` (lines of hub text), `static`.
 - **`Tasks.quiz`** (multiple-choice rounds from a generator), **`Tasks.playSeq`** (play notes in order: scales, arpeggios, melodies), **`Tasks.playChords`** (play named chords; timed or not). See the comments in `11-components.js` for every option.
 - **`chromaMeter(el)`**: live 12-bar picture of what the mic hears.
+- **Voices** (`14-voices.js`; full options in its comments). Voices are listed top to bottom, one array of columns each; an entry is `'C4'`, a MIDI number or `null` (blank).
+  - `VoiceLead.check(voices, { key, mode, romans, style: 'chorale'|'species1'|'species2'|'species4'|'free', beats, cantus, fixed, severity, ignore })` → `[{ rule, col, cols, voices, severity: 'error'|'warn', text }]`, errors first; `VoiceLead.RULES` names every rule id. Also `motion(a1, a2, b1, b2)`, `intervalClass(lo, hi)`, `nearestVoicing(prev, chord, opts)`, `totalMotion(a, b)`, `realize(romans, key, mode, { soprano, bass })` → S A T B note names, `corrupt(voices, rule, opts)` (a copy with `.planted`) and `plant(voices, rules, opts)` → `{ voices, planted }`.
+  - `VoiceView.svg({ voices, staves: 'grand'|'single'|'two', clef, clefs, key, mode, labels, marks, lines, sel, durations, style, editable, placeholders, fixed })` → SVG; put it in a `.vv-box` so it scrolls inside its box on a phone.
+  - `PartWriter.mount(el, { voices: 2|4, cols, given: { cantus, soprano, alto, tenor, bass }, romans, key, mode, style, initial, onChange })` → `{ voices, problems, set, select, play, destroy }`: select a cell, play a note (keys, MIDI or mic), checked live. `Tasks.partWrite` adds a name and Save (sketches keep `voices` and `romans`); `Tasks.findErrors({ romans, key, mode, errors, name, fix })` plants errors to tap.
 - **`Theory`**: see `src/theory.js`. Notes are spelled strings (`'F♯4'`, `'B♭'`); `Theory.midi`, `Theory.pc`, `Theory.scale(root, type, withTop)`, `Theory.recipe(type)`, `Theory.chordNotes(root, q)`, `Theory.identify(pcs, bassPc)`, `Theory.interval(a, b)`, `Theory.INTERVALS` (with song anchors), `Theory.keySig(tonic, mode)`, `Theory.keyFromSig(n, mode)`, `Theory.CIRCLE`, `Theory.circlePos`, `Theory.diatonic(tonic, mode, sevenths)`, `Theory.romanChord(roman, tonic, mode)`, `Theory.progression(romans, tonic, mode)`, `Theory.PROGRESSIONS`.
 
 ## Review cards
