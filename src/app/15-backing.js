@@ -40,7 +40,7 @@ const BK_STYLE_LIST = [
   { id: 'rock', name: 'Rock', meter: '4/4', bpm: 116, desc: 'Driving eighths: bass on every eighth, power chords held under a hard backbeat.',
     drums: { hat: bkGrid(4, 0.5, 0.5, 0.36), kick: [[0, 0.95], [1.5, 0.6], [2, 0.9], [2.5, 0.6]], snare: [[1, 0.85], [3, 0.85]] },
     bass: bkGrid(4, 0.5, 0.7, 0.55).map(([x, v]) => [x, 0.42, 'R', v]),
-    comp: { voicing: 'power', range: [40, 64], sound: 'pad', attack: 0.012, hits: [[0, 1.95, 0.42], [2, 1.95, 0.4]] } },
+    comp: { voicing: 'power', range: [36, 64], sound: 'pad', attack: 0.012, hits: [[0, 1.95, 0.42], [2, 1.95, 0.4]] } },
   { id: 'ballad', name: 'Ballad', meter: '4/4', bpm: 72, desc: 'Sustained pads, a soft kick and cross-stick, the bass on beats 1 and 3.',
     drums: { kick: [[0, 0.5], [2.5, 0.32]], rim: [[1, 0.22], [3, 0.22]], hat: [[0, 0.12], [1, 0.12], [2, 0.12], [3, 0.12]] },
     bass: [[0, 1.9, 'R', 0.6], [2, 1.9, '5', 0.5]],
@@ -149,11 +149,11 @@ function bkTones(c, how) {
   if (how === 'shell') return uniq([third, sev, ext[0], sev == null ? fifth : null, root]).slice(0, 3);
   return uniq([third, sev, ext[0], root, fifth].concat(ext.slice(1)).concat(pcs)).slice(0, 4);
 }
-/* every way to put these pitch classes in [lo, hi] as sorted MIDI lists, doubling the root or the 5th when there are
-   more voices than tones: close and open positions within a 10th, no minor 2nd between the top two voices */
+/* every way to put these pitch classes in [lo, hi] as sorted MIDI lists, doubling the root, the 5th or the 3rd when
+   there are more voices than tones: close and open positions (within a 12th), no minor 2nd between the top two voices */
 function bkCandidates(pcs, n, lo, hi, root, fifth) {
   const base = pcs.slice(0, n), extra = n - base.length;
-  const fills = extra <= 0 ? [[]] : [root, fifth].concat(pcs).filter((p, i, a) => p != null && a.indexOf(p) === i).slice(0, 2).map(p => Array(extra).fill(p));
+  const fills = extra <= 0 ? [[]] : [root, fifth].concat(pcs).filter((p, i, a) => p != null && a.indexOf(p) === i).slice(0, 3).map(p => Array(extra).fill(p));
   const seen = new Set(), all = [];
   fills.forEach(fill => {
     const use = base.concat(fill);
@@ -163,7 +163,7 @@ function bkCandidates(pcs, n, lo, hi, root, fifth) {
       opts[i].forEach(m => { if (acc.indexOf(m) < 0) { acc.push(m); rec(i + 1, acc); acc.pop(); } });
     })(0, []);
   });
-  const good = all.filter(s => s[s.length - 1] - s[0] <= (n > 3 ? 16 : 12) && (s.length < 2 || s[s.length - 1] - s[s.length - 2] >= 2));
+  const good = all.filter(s => s[s.length - 1] - s[0] <= (n > 3 ? 19 : 14) && (s.length < 2 || s[s.length - 1] - s[s.length - 2] >= 2));
   return good.length ? good : all;
 }
 /* the voicing that moves least from prev (sum of each voice's move, then the largest move), drifting little from centre */
@@ -253,7 +253,8 @@ function bkWalk(c, nx, beats, prev) {
   const R = bkNear(c.bassPc, prev == null ? 40 : prev, BK_BASS_LO, BK_BASS_HI - 4);
   const k = Math.max(1, Math.floor(beats + 1e-9));
   if (k === 1) return [R];
-  const T = nx ? bkNear(nx.bassPc, R, BK_BASS_LO, BK_BASS_HI) : null;
+  /* the next root where the next bar will place it (the same range as R), so the approach really lands on it */
+  const T = nx ? bkNear(nx.bassPc, R, BK_BASS_LO, BK_BASS_HI - 4) : null;
   const tones = c.pcs.filter(p => p !== c.bassPc);
   const line = dir => {
     const out = [R];
@@ -339,11 +340,22 @@ function bkArrange(o) {
   }
   /* bass */
   if (pat.bass === 'walk') {
-    let prev = null;
-    for (let rep = 0; rep * chordLen < len; rep++) chords.forEach(c => {
-      const t0 = rep * chordLen + c.t; if (t0 >= len) return;
-      bkWalk(c, nextOf(c), Math.min(c.d, len - t0), prev).forEach((m, i) => { prev = m; events.push({ role: 'bass', kind: 'bass', t: t0 + i, d: 0.9, m, v: i ? 0.62 : 0.72, bar: Math.floor((t0 + i) / barLen) }); });
-    });
+    const pass = start => {
+      let prev = start; const out = [];
+      for (let rep = 0; rep * chordLen < len; rep++) chords.forEach(c => {
+        const t0 = rep * chordLen + c.t; if (t0 >= len) return;
+        bkWalk(c, nextOf(c), Math.min(c.d, len - t0), prev).forEach((m, i) => { prev = m; out.push({ t: t0 + i, m, first: i === 0 }); });
+      });
+      return out;
+    };
+    let line = pass(null);
+    /* looping: walk again from where the line ended, and aim the last approach at the real first note */
+    if (loop && line.length > 2) {
+      line = pass(line[line.length - 1].m);
+      const L = line.length, f = line[0].m;
+      if (!line[L - 1].first && Math.abs(line[L - 1].m - f) !== 1 && Math.abs(line[L - 1].m - f) !== 2) line[L - 1].m = bkApproach(f, line[L - 2].m);
+    }
+    line.forEach(x => events.push({ role: 'bass', kind: 'bass', t: x.t, d: 0.9, m: x.m, v: x.first ? 0.72 : 0.62, bar: Math.floor(x.t / barLen) }));
   } else if (pat.bass === 'drone') {
     let prev = 38;
     for (let rep = 0; rep * chordLen < len; rep++) chords.forEach(c => {
@@ -425,9 +437,10 @@ function bkSound(e, when, spb) {
 }
 
 /* Backing.start(o) → { stop(), setMute(role, on), setChords(list), setTempo(bpm), setStyle(id), playing, cur, bar,
-   bpm, style, arrangement, startT, spb, time(beat), muted }
+   bpm, style, arrangement, startT, spb, time(beat), muted, bus, gains }
    cur: idx of the chord playing now. bar: the bar playing now (counting from 0; count-in bars are negative).
    startT: audio time of beat 1 of bar 0; time(beat) → audio time of that beat of the first pass (tempo changes aside).
+   bus: the backing's GainNode (into Sound.master); gains: { drums, bass, chords, melody } GainNodes into the bus.
    setMute(role, true) silences that role at once (its gain falls to 0) and stops scheduling it; false brings it back
    from the next note. setChords/setTempo/setStyle take effect from the next bar that is not yet scheduled. */
 function bkStart(o) {
@@ -442,6 +455,7 @@ function bkStart(o) {
   const bus = ctx.createGain(); bus.gain.value = 1; bus.connect(Sound.master);
   const gains = {};
   BK_ROLES.forEach(r => { const g = ctx.createGain(); g.gain.value = ctl.muted[r] ? 0 : 1; g.connect(bus); gains[r] = g; });
+  ctl.bus = bus; ctl.gains = gains;
   let timers = [], pumpId = 0, n = -(o.countIn || 0), nextT = ctx.currentTime + 0.12, ending = false, pending = [];
   const spb = () => 60 / ctl.bpm;
   const playBars = o.bars || (o.loop === false ? arr.bars : 0);
