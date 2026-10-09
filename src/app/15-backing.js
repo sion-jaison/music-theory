@@ -10,7 +10,7 @@
 
    o: { style ('pop'), chords, key ('C'), mode ('major'), bpm (the style's), meter (the style's), loop (true), bars,
         countIn (bars of clicks first), melody, mute: { drums, bass, chords, melody }, voicing ('quartal' for the main
-        comping part), swing (overrides the style's), gate (false: the mic keeps listening), onChord(i, chord),
+        comping part), voices (how many notes in each chord: 3 for plain triads), swing (overrides the style's), gate (false: the mic keeps listening), onChord(i, chord),
         onBar(n), onBeat(b), onCount(n), onStart, onStop, onEnd }
    chords, in any of these forms:
      [{ sym: 'Am', beats: 4 }, …]   [{ roman: 'vi', beats: 2 }, …] (with key and mode)   ['Am', 'F', …]   ['vi', 'IV', …]
@@ -325,7 +325,8 @@ function bkArrange(o) {
   const nextOf = c => { const i = chords.indexOf(c); return chords[i + 1] || (loop ? chords[0] : null); };
   const layers = pat.comp.map((L, li) => {
     const how = li === 0 && o.voicing ? o.voicing : L.voicing;
-    return { L, how, voicings: chords.length ? bkVoiceLead(chords, how, L.n, L.range, loop) : [] };
+    const n = o.voices && how !== 'power' && how !== 'quartal' ? o.voices : L.n;
+    return { L, how, voicings: chords.length ? bkVoiceLead(chords, how, n, L.range, loop) : [] };
   });
   const voiceOf = (layer, c) => layer.voicings[chords.indexOf(c)];
   /* drums */

@@ -23,13 +23,57 @@ function playChordList(chords, oct) {
   return Sound.seq(notes);
 }
 const midiOf = n => Theory.midi(n);
-/* play a sketch: its melody plus, if it has them, its chords underneath */
-function playSketch(s) {
+/* play a sketch: its melody plus, if it has them, its chords underneath.
+   A sketch with parts ([{ notes }]) or voices (S A T B, see MidiFile) plays every part as well; a backing ({ style, mute }
+   on the sketch, or opts.backing) has that band play the chords under everything (Backing). Those plays go through their
+   own gain node, so stopSketch() silences them. Returns the length in ms. */
+let sketchPlaying = null;
+function stopSketch() { if (sketchPlaying) { sketchPlaying.stop(); sketchPlaying = null; } }
+const SK_DRUM = m => m === 35 || m === 36 ? 'kick' : m === 37 ? 'rim' : m === 38 || m === 40 ? 'snare' : m === 51 || m === 59 ? 'ride' : 'hat';
+function playSketch(s, opts) {
+  opts = opts || {};
+  const backing = opts.backing || s.backing;
+  if (s.parts || s.voices || (backing && backing.style)) return playSketchParts(s, backing);
   const notes = (s.notes || []).map(n => ({ m: n.m, t: n.t, d: n.d || 0.4 }));
   (s.chords || []).forEach(c => {
     try { Theory.voicing(Theory.parseChord(c.sym).root, Theory.parseChord(c.sym).q, 3).forEach(m => notes.push({ m, t: c.t, d: c.d || 1, v: 0.4 })); } catch (e) { /* skip unknown symbols */ }
   });
   return Sound.seq(notes);
+}
+/* every part of a sketch, in seconds: melody, parts (drum parts apart) and voices */
+function sketchLines(s) {
+  const bpm = s.bpm || (s.score && s.score.bpm) || 90, k = bpm / 60, out = [], drums = [];
+  (s.notes || []).forEach(n => out.push({ m: n.m, t: n.t, d: n.d || 0.4, v: n.v || 0.8 }));
+  (s.parts || []).forEach(p => (p.notes || []).forEach(n => {
+    if (n == null || n.m == null) return;
+    if (p.drums || p.channel === 10) drums.push({ kind: SK_DRUM(n.m), t: n.t, v: n.v || 0.5 });
+    else out.push({ m: n.m, t: n.t, d: n.d || 0.4, v: n.v || 0.6 });
+  }));
+  mfVoices(s, k).forEach(v => v.notes.forEach(n => out.push({ m: n.m, t: n.t / k, d: n.d / k, v: 0.55 })));
+  return { notes: out, drums, bpm, k };
+}
+function playSketchParts(s, backing) {
+  stopSketch();
+  const ctx = Sound.ensure(); if (!ctx) return 0;
+  const L = sketchLines(s);
+  if (backing && backing.style && (s.chords || []).length) {
+    const ctl = Backing.start({ style: backing.style, bpm: L.bpm, meter: (s.score && s.score.meter) || s.meter, loop: false, mute: backing.mute,
+      chords: s.chords.map(c => ({ sym: c.sym, t: c.t * L.k, d: (c.d || 1) * L.k })),
+      melody: L.notes.map(n => ({ m: n.m, t: n.t * L.k, d: n.d * L.k, v: n.v })) });
+    sketchPlaying = ctl;
+    return ctl.arrangement ? (ctl.arrangement.len * 60 / L.bpm + 0.12) * 1000 : 0;
+  }
+  const bus = ctx.createGain(); bus.gain.value = 1; bus.connect(Sound.master);
+  let ms = 0;
+  Sound.routed(bus, () => {
+    const notes = L.notes.slice();
+    (s.chords || []).forEach(c => { try { const pc = Theory.parseChord(c.sym); Theory.voicing(pc.root, pc.q, 3).forEach(m => notes.push({ m, t: c.t, d: c.d || 1, v: 0.4 })); } catch (e) { /* skip */ } });
+    ms = Sound.seq(notes);
+    const t0 = ctx.currentTime + 0.08;
+    L.drums.forEach(d => Sound[d.kind](t0 + d.t, d.v));
+  });
+  sketchPlaying = { stop() { try { const t = Sound.now(); bus.gain.setValueAtTime(1, t); bus.gain.linearRampToValueAtTime(0.0001, t + 0.05); } catch (e) { /* rings out */ } setTimeout(() => { try { bus.disconnect(); } catch (e) { /* gone */ } }, 200); } };
+  return ms;
 }
 
 /* ---------- staff notation ----------

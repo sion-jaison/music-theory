@@ -1,0 +1,65 @@
+/* ---------- Studio tools: the backing band, Transcribe, MIDI export, instruments ---------- */
+.fb.warn { color: var(--glow); }
+
+/* the Toolbox's Studio tabs sit under the reference tabs, in the same pill style */
+.studio-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.studio-tabs .eyebrow { margin-right: 4px; }
+.studio-tabs button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 14px; font-weight: 700; font-size: 14px; color: var(--muted); }
+.studio-tabs button[aria-current="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* Backing.ui */
+.bk { display: grid; gap: 10px; min-width: 0; }
+.bk-top { align-items: flex-end; }
+.bk-tempo input { width: min(220px, 60vw); }
+.bk-style-name { display: grid; gap: 2px; }
+.bk-style-name b { font-family: var(--f-display); font-size: 18px; }
+.bk-chords { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-chip { display: grid; justify-items: center; min-width: 54px; padding: 6px 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); }
+.bk-chip small { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.bk-chip b { font-family: var(--f-display); font-size: 18px; line-height: 1.2; }
+.bk-chip.on { background: var(--glow-soft); border-color: var(--glow); }
+.bk-mutes { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.bk-mute { min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-weight: 700; font-size: 14px; }
+.bk-mute[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.bk-mute[aria-pressed="false"] { text-decoration: line-through; }
+.bk-mute[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* Transcribe */
+.tr { display: grid; gap: 12px; min-width: 0; }
+.tr-open { align-items: center; }
+.tr-file { position: relative; overflow: hidden; cursor: pointer; }
+.tr-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
+.tr-file:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.tr-private { margin-top: -6px; }
+.tr-work { display: grid; gap: 10px; min-width: 0; }
+.tr-title { font-size: 17px; overflow-wrap: anywhere; }
+.tr-wave { position: relative; border-radius: 10px; background: var(--surface-2); overflow: hidden; touch-action: none; }
+.tr-wave canvas { display: block; width: 100%; height: 72px; cursor: crosshair; }
+.tr-transport { gap: 8px; }
+.tr-time { min-width: 3.2em; font-size: 15px; }
+.tr-speed input { width: min(160px, 50vw); }
+.tr-now { text-transform: none; letter-spacing: 0; font-family: var(--f-body); color: var(--accent); }
+.tr-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; min-width: 0; scrollbar-width: thin; }
+.tr-seg { flex: 0 0 auto; display: grid; justify-items: center; gap: 0; min-width: 58px; padding: 6px 10px; border-radius: 10px; border: 1.5px dashed var(--line); background: var(--surface); position: relative; }
+.tr-seg small { font-size: 11px; color: var(--muted); }
+.tr-seg b { font-family: var(--f-display); font-size: 18px; line-height: 1.2; }
+.tr-seg i { position: absolute; top: 2px; right: 5px; font-style: normal; font-size: 12px; color: var(--good); }
+.tr-seg.ok { border-style: solid; border-color: var(--good); background: var(--good-soft); }
+.tr-seg.ok b { color: var(--good); }
+.tr-seg.sel { box-shadow: 0 0 0 2px var(--accent); }
+.tr-seg.on { background: var(--glow-soft); border-color: var(--glow); }
+.tr-pick { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.tr-pick p { overflow-wrap: anywhere; }
+.tr-sug { font-family: var(--f-display); font-size: 18px; }
+.tr-alts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tr-alt { border: 1px solid var(--line); cursor: pointer; min-height: 32px; }
+.tr-alt.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.tr-chart { display: flex; flex-wrap: wrap; gap: 6px; }
+.tr-cell { display: grid; justify-items: center; min-width: 54px; padding: 6px 10px; border-radius: 10px; border: 1.5px solid var(--good); background: var(--good-soft); }
+.tr-cell b { font-family: var(--f-display); font-size: 18px; color: var(--good); line-height: 1.2; }
+.tr-cell small { font-size: 11px; color: var(--muted); }
+
+/* Export MIDI */
+.ex-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ex-item { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.ex-what { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
