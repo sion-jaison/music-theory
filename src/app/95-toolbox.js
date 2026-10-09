@@ -107,17 +107,22 @@ function toolListen(el) {
   const $ = s => el.querySelector(s);
   const trail = [], heard = [];
   const paintTrail = () => { $('[data-trail]').innerHTML = trail.length ? trail.slice(-10).map(x => `<span class="n${x.chord ? ' chord' : ''}">${x.label}</span>`).join('') : '<span class="empty">Nothing yet</span>'; };
+  /* the key: Krumhansl–Schmuckler profiles over the last 30 s (newer notes count more), plus which keys hold every note */
   function paintKey() {
-    const now = performance.now();
-    const pcs = [...new Set(heard.filter(h => now - h.t < 30000).map(h => h.pc))];
+    const now = performance.now(), recent = heard.filter(h => now - h.t < 30000);
+    const pcs = [...new Set(recent.map(h => h.pc))];
     const box = $('[data-key]');
     if (pcs.length < 4) { box.innerHTML = 'Play at least four different notes and Motif will suggest the key they fit.'; return; }
+    const w = new Array(12).fill(0);
+    recent.forEach(h => { w[h.pc] += 1 - (now - h.t) / 45000; });
+    const ranked = Theory.findKey(w), top = ranked[0], second = ranked[1];
     const fits = Theory.CIRCLE.map((k, i) => ({ k, i, n: pcs.filter(p => Theory.scale(k).map(Theory.pc).indexOf(p) >= 0).length }));
     const best = Math.max.apply(null, fits.map(f => f.n));
     const keys = fits.filter(f => f.n === best).slice(0, 3);
-    box.innerHTML = best === pcs.length
-      ? `These notes fit <b>${keys.map(f => f.k + ' major / ' + Theory.CIRCLE_MINOR[f.i] + ' minor').join('</b>, or <b>')}</b>.`
-      : `Closest: <b>${keys.map(f => f.k + ' major').join('</b> or <b>')}</b> (${best} of ${pcs.length} notes fit).`;
+    const sure = top.r - second.r > 0.08 ? 'Most likely' : 'Probably';
+    box.innerHTML = `${sure} <b>${top.name}</b>${top.r - second.r <= 0.08 ? `, or <b>${second.name}</b>` : ''}. ` + (best === pcs.length
+      ? `Every note fits <b>${keys.map(f => f.k + ' major / ' + Theory.CIRCLE_MINOR[f.i] + ' minor').join('</b>, or <b>')}</b>.`
+      : `Closest scales: <b>${keys.map(f => f.k + ' major').join('</b> or <b>')}</b> (${best} of ${pcs.length} notes fit).`);
   }
   const offs = [
     Bus.on('note', d => {

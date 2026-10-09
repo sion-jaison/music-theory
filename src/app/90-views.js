@@ -5,8 +5,8 @@ const view = document.getElementById('view');
 let current = 'home';
 function setNav(name) { document.querySelectorAll('.nav button').forEach(b => b.setAttribute('aria-current', b.dataset.view === name ? 'page' : 'false')); }
 function go(name, arg) {
-  runCleanup(); current = name; setNav(name === 'lesson' || name === 'daily' ? 'home' : name);
-  ({ home: renderHome, lesson: renderLesson, daily: renderDaily, sketchbook: renderSketchbook, toolbox: renderToolbox, setup: renderSetup })[name](arg);
+  runCleanup(); current = name; setNav(name === 'lesson' || name === 'daily' || name === 'listen' ? 'home' : name);
+  ({ home: renderHome, lesson: renderLesson, daily: renderDaily, sketchbook: renderSketchbook, toolbox: renderToolbox, setup: renderSetup, listen: renderListen })[name](arg);
   window.scrollTo({ top: 0 });
 }
 
@@ -68,6 +68,7 @@ function renderHome(levelN) {
       <div class="stat"><b>${Store.data.range ? noteName(Store.data.range.zl) + '–' + noteName(Store.data.range.zh) : '—'}</b><span>voice home zone</span></div>
     </section>
   </div>
+  ${isIntermediate() ? weekPanel() : ''}
   <div class="level-sections">${SECTIONS.filter(sec => sectionLevels(sec).length).map(sec => `<div class="level-section"><div class="eyebrow">${sec}</div><nav class="level-tabs" aria-label="${sec} levels">${sectionLevels(sec).map(l => `<button type="button" data-level="${l.n}" aria-current="${l.n === shown.n ? 'true' : 'false'}" class="${levelPassed(l.n) ? 'passed' : levelUnlocked(l.n) ? 'open' : 'locked'}"><span class="mono">${l.n}</span><span class="t">${l.title}</span>${levelPassed(l.n) ? '<span class="st">✓</span>' : levelUnlocked(l.n) ? '' : '<span class="st" aria-label="locked">🔒</span>'}</button>`).join('')}</nav></div>`).join('')}</div>
   <section class="panel">
     <div class="level-head"><div><div class="eyebrow">${shown.section} · Level ${shown.n}</div><h2>${shown.title}</h2><p class="tagline">${shown.tagline || ''}</p></div>${chip}</div>
@@ -79,6 +80,8 @@ function renderHome(levelN) {
     }).join('')}</div>
   </section>`;
   view.querySelector('[data-act="daily"]').onclick = () => go('daily');
+  const lmb = view.querySelector('[data-act="map"]'); if (lmb) lmb.onclick = () => go('listen', lmb.dataset.id);
+  const pkb = view.querySelector('[data-act="pick"]'); if (pkb) pkb.onclick = () => go('sketchbook', 'pick');
   const nb = view.querySelector('[data-act="next"]'); if (nb) nb.onclick = () => go('lesson', nx.id);
   view.querySelectorAll('[data-level]').forEach(b => { b.onclick = () => renderHome(+b.dataset.level); });
   const bb = view.querySelector('[data-boss]'); if (bb) bb.onclick = () => go('lesson', bb.dataset.boss + '.B');
@@ -87,6 +90,22 @@ function renderHome(levelN) {
     b.addEventListener('click', open);
     b.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
   });
+}
+
+/* this week: the Listening Map and the Portfolio pick */
+function weekPanel() {
+  const m = listeningThisWeek(), heard = m && Store.data.listening && Store.data.listening[m.id], pk = weekPick();
+  return `<section class="panel week"><div class="eyebrow">This week</div><div class="week-items">
+    <div class="week-item"><span class="eyebrow">Listening Map</span>${m ? `<h3>${esc(m.song)} <span class="muted">· ${esc(m.artist)}</span></h3><p class="muted small">${esc(m.topic)}${heard && heard.at >= weekKey() ? ` · heard: ${heard.right} of ${heard.of}` : ''}</p><button type="button" class="btn small" data-act="map" data-id="${m.id}">${heard && heard.at >= weekKey() ? 'Listen again' : 'Open the map'}</button>` : '<p class="muted small">Your first map opens with the first unit that has one.</p>'}</div>
+    <div class="week-item"><span class="eyebrow">Portfolio pick</span>${pk ? `<h3>★ ${esc(pk.title)}</h3><p class="muted small">${esc(pk.why)}</p>` : `<p class="muted small">Choose the best sketch you made this week, give it a title and say why. It becomes a seed for your next project.</p>`}<button type="button" class="btn small" data-act="pick">${pk ? 'Change the pick' : 'Pick this week’s best'}</button></div>
+  </div></section>`;
+}
+const weekPick = () => (Store.data.picks || []).find(x => x.week === weekKey());
+function renderListen(id) {
+  view.innerHTML = `<section class="panel"><div class="lesson-head"><div><div class="eyebrow">This week</div><h1>Listening Map</h1></div><button type="button" class="btn ghost small" data-act="exit">← Home</button></div><div class="stage"><div class="task"></div><div class="stepnav"><span></span><button type="button" class="btn primary" data-act="done" hidden>Done</button></div></div></section>`;
+  view.querySelector('[data-act="exit"]').onclick = () => go('home');
+  const dn = view.querySelector('[data-act="done"]'); dn.onclick = () => go('home');
+  cleanup = Tasks.listeningMap(view.querySelector('.task'), id ? { id } : {}, () => { dn.hidden = false; });
 }
 
 function renderLesson(id) {
@@ -220,7 +239,7 @@ function onePercentMessage() {
     const s0 = speed(prev), s1 = speed(today);
     if (s0 && s1 && s1 < s0) return { big: `${s0.toFixed(1)} s → ${s1.toFixed(1)} s`, small: 'Average time per review card, last session vs today. Faster recall is what mastery looks like.' };
     const e0 = acc(prev.earOk, prev.earN), e1 = acc(today.earOk, today.earN);
-    if (e0 != null && e1 != null && e1 > e0) return { big: `${Math.round(e0 * 100)}% → ${Math.round(e1 * 100)}%`, small: 'Ear spark accuracy, last session vs today.' };
+    if (e0 != null && e1 != null && e1 > e0) return { big: `${Math.round(e0 * 100)}% → ${Math.round(e1 * 100)}%`, small: isIntermediate() ? 'Ear Gym accuracy, last session vs today.' : 'Ear spark accuracy, last session vs today.' };
     const u0 = acc(prev.tuneOk, prev.tuneN), u1 = acc(today.tuneOk, today.tuneN);
     if (u0 != null && u1 != null && u1 > u0) return { big: `${Math.round(u0 * 100)}% → ${Math.round(u1 * 100)}%`, small: 'Notes matched on the first try, last session vs today.' };
     const bars = barsThisWeek();
@@ -271,18 +290,56 @@ function cardBlack(el, c, fin) {
 
 /* ---------- Sketchbook ---------- */
 /* what stage of growth a sketch is at, from the level that made it */
-const sketchKind = s => s.version === 2 ? 'version 2' : s.project ? 'project draft' : ({ 1: 'motif', 2: 'phrase', 3: 'with chords', 4: 'minor', 5: '8-bar piece', 6: 'theme' })[s.level] || 'idea';
-function renderSketchbook() {
-  const list = Store.data.sketches;
-  view.innerHTML = `<section class="panel"><div class="level-head"><div><div class="eyebrow">Sketchbook</div><h2>Your musical ideas</h2></div><span class="chip">${list.length} saved</span></div><p style="color:var(--muted);margin-top:8px;max-width:60ch">Every idea you save lives here. One idea grows through the levels: a motif, then a phrase, then a phrase with chords, a minor version, and finally an 8-bar piece. Saved in this browser.</p><div class="sketches" style="margin-top:16px">${list.length ? list.map(s => `<div class="sketch" data-id="${s.id}"><div><h3>${esc(s.name)}</h3><div class="meta"><span class="chip">${sketchKind(s)}</span> ${(s.notes || []).map(n => SHARP[mod12(n.m)]).join(' · ')}${s.chords && s.chords.length ? ' · chords ' + s.chords.map(c => Theory.pretty(c.sym)).join(' ') : ''}${s.key ? ' · ' + esc(s.key) : ''} · ${s.created}${s.prompt ? ' · ' + esc(s.prompt) : ''}${s.from && list.some(x => x.id === s.from) ? ' · grew from “' + esc(list.find(x => x.id === s.from).name) + '”' : ''}</div></div><div class="row"><button type="button" class="btn small" data-act="play">▶ Play</button><span class="del"><button type="button" class="btn small ghost" data-act="del">Delete</button></span></div></div>`).join('') : '<div class="empty-state"><b>No sketches yet.</b><span>Your first one comes from the “Your first motif” stop on the Level 1 path, or the Create step of any Daily Set.</span><button type="button" class="btn primary" data-act="motif">Make a motif now</button></div>'}</div></section>`;
+const sketchKind = s => s.version === 2 ? 'version 2' : s.project ? 'project draft' : ({ 1: 'motif', 2: 'phrase', 3: 'with chords', 4: 'minor', 5: '8-bar piece', 6: 'theme', 7: 'colour study', 8: 'voices', 9: 'chromatic', 10: 'song' })[s.level] || 'idea';
+const rubricSum = r => r && r.scores ? Object.values(r.scores).reduce((a, b) => a + b, 0) + ' of ' + Object.keys(r.scores).length * 2 : '';
+/* notation for a sketch: its score if it has one, else its notes on a staff */
+function sketchArt(s) {
+  try {
+    if (s.score && s.score.events) return `<div class="nt-box">${Score.svg(s.score.events, { meter: s.score.meter, keySig: s.score.keySig || 0 })}</div>`;
+    if (typeof VoiceView !== 'undefined' && s.voices) return `<div class="nt-box">${VoiceView.svg({ voices: s.voices })}</div>`;
+    if (s.notes && s.notes.length) return `<div class="nt-box">${Staff.svg({ clef: 'treble', notes: s.notes.slice(0, 32).map(n => Theory.fromMidi(n.m)) })}</div>`;
+  } catch (e) { /* fall through */ }
+  return '<p class="muted small">No notation for this one.</p>';
+}
+/* arg 'pick' opens the Portfolio pick form */
+function renderSketchbook(arg) {
+  const list = Store.data.sketches, picks = Store.data.picks || (Store.data.picks = []);
+  const tags = {};
+  list.forEach(s => (s.tags || []).forEach(t => { tags[t] = (tags[t] || 0) + 1; }));
+  const tagList = Object.keys(tags).sort((a, b) => tags[b] - tags[a] || (a < b ? -1 : 1));
+  const filt = Store.data.settings.portfolioTag || '';
+  const shown = filt === '★' ? list.filter(s => picks.some(p => p.id === s.id)) : filt ? list.filter(s => (s.tags || []).indexOf(filt) >= 0) : list;
+  const inter = isIntermediate(), week = weekKey(), thisWeek = list.filter(s => s.created >= week), pk = weekPick();
+  const pickOf = s => picks.filter(p => p.id === s.id).slice(-1)[0];
+  view.innerHTML = `<section class="panel"><div class="level-head"><div><div class="eyebrow">${inter ? 'Portfolio' : 'Sketchbook'}</div><h2>Your musical ideas</h2></div><span class="chip">${list.length} saved</span></div>
+    <p style="color:var(--muted);margin-top:8px;max-width:60ch">${inter ? 'Every sketch, theme and project you save lives here, tagged with the techniques it uses. Each week, pick your best one: it becomes a seed for the next project. Saved in this browser.' : 'Every idea you save lives here. One idea grows through the levels: a motif, then a phrase, then a phrase with chords, a minor version, and finally an 8-bar piece. Saved in this browser.'}</p>
+    ${inter || picks.length ? `<div class="pick-box${arg === 'pick' ? ' open' : ''}"><div class="eyebrow">Pick of the week</div>${pk && arg !== 'pick' ? `<p><b>★ ${esc(pk.title)}</b> · ${esc(pk.why)} <button type="button" class="btn small ghost" data-act="repick">Change</button></p>` : thisWeek.length ? `<div class="pick-form"><label class="sel" for="pk-s"><span>This week’s sketch</span><select id="pk-s">${thisWeek.map(s => `<option value="${s.id}"${pk && pk.id === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label><div class="field"><label for="pk-t">Its title</label><input id="pk-t" type="text" maxlength="40" value="${esc(pk ? pk.title : thisWeek[0].name)}"></div><div class="field"><label for="pk-w">Why it is your best, in one sentence</label><input id="pk-w" type="text" maxlength="140" value="${esc(pk ? pk.why : '')}"></div><div class="row"><button type="button" class="btn primary small" data-act="savepick" disabled>Make it the pick</button></div></div>` : '<p class="muted small">Nothing saved this week yet. Make something in the Daily Set’s 8 Bars, then pick it here.</p>'}</div>` : ''}
+    ${tagList.length ? `<div class="choices tag-filter" role="group" aria-label="Filter by technique"><button type="button" class="choice" data-tag="" aria-pressed="${!filt}">All</button>${picks.length ? `<button type="button" class="choice" data-tag="★" aria-pressed="${filt === '★'}">★ Picks</button>` : ''}${tagList.map(t => `<button type="button" class="choice" data-tag="${esc(t)}" aria-pressed="${filt === t}">${esc(t)} <small>${tags[t]}</small></button>`).join('')}</div>` : ''}
+    <div class="sketches" style="margin-top:16px">${shown.length ? shown.map(s => { const pkd = pickOf(s); return `<div class="sketch" data-id="${s.id}"><div><h3>${pkd ? '★ ' : ''}${esc(pkd ? pkd.title : s.name)}</h3><div class="meta"><span class="chip">${sketchKind(s)}</span>${s.level ? ` <span class="chip">Level ${s.level}</span>` : ''} ${(s.tags || []).map(t => `<span class="chip tag">${esc(t)}</span>`).join(' ')} ${s.score ? '' : (s.notes || []).slice(0, 16).map(n => SHARP[mod12(n.m)]).join(' · ')}${s.chords && s.chords.length ? ' · chords ' + s.chords.slice(0, 12).map(c => Theory.pretty(c.sym)).join(' ') + (s.chords.length > 12 ? ' …' : '') : ''}${s.key ? ' · ' + esc(s.key) : ''} · ${s.created}${s.prompt ? ' · ' + esc(s.prompt) : ''}${s.from && list.some(x => x.id === s.from) ? ' · grew from “' + esc(list.find(x => x.id === s.from).name) + '”' : ''}${s.review ? ' · rubric ' + rubricSum(s.review) : ''}${s.compare ? ' · ' + (s.compare.winner === s.id ? 'judged stronger than the draft' : 'the draft stayed stronger') : ''}${pkd ? ' · ' + esc(pkd.why) : ''}</div><div class="sk-art" hidden></div></div><div class="row"><button type="button" class="btn small" data-act="play">▶ Play</button><button type="button" class="btn small ghost" data-act="see">Notation</button>${typeof MidiFile !== 'undefined' ? '<button type="button" class="btn small ghost" data-act="midi">MIDI</button>' : ''}<span class="del"><button type="button" class="btn small ghost" data-act="del">Delete</button></span></div></div>`; }).join('') : list.length ? '<p class="muted">No sketches with this tag.</p>' : '<div class="empty-state"><b>No sketches yet.</b><span>Your first one comes from the “Your first motif” stop on the Level 1 path, or the Create step of any Daily Set.</span><button type="button" class="btn primary" data-act="motif">Make a motif now</button></div>'}</div></section>`;
   const mk = view.querySelector('[data-act="motif"]'); if (mk) mk.onclick = () => go('lesson', '1.M');
+  view.querySelectorAll('[data-tag]').forEach(b => { b.onclick = () => { Store.data.settings.portfolioTag = b.dataset.tag; Store.save(); renderSketchbook(); }; });
+  const rp = view.querySelector('[data-act="repick"]'); if (rp) rp.onclick = () => renderSketchbook('pick');
+  const sp = view.querySelector('[data-act="savepick"]');
+  if (sp) {
+    const t = view.querySelector('#pk-t'), wy = view.querySelector('#pk-w'), sel = view.querySelector('#pk-s');
+    const ok = () => { sp.disabled = !t.value.trim() || !wy.value.trim(); };
+    t.oninput = ok; wy.oninput = ok; sel.onchange = () => { const x = list.find(y => y.id === sel.value); if (x && !pk) t.value = x.name; ok(); }; ok();
+    sp.onclick = () => {
+      Store.data.picks = picks.filter(p => p.week !== week).concat([{ week, id: sel.value, title: t.value.trim(), why: wy.value.trim(), at: todayStr() }]);
+      Store.day().wins.push({ big: '★ ' + t.value.trim(), small: 'Your pick of the week. Choosing your best work, and saying why, trains the ear you write with. It is first in line as a seed for your next project.' });
+      Store.save(); renderSketchbook();
+    };
+  }
   view.querySelectorAll('.sketch').forEach(row => {
     const s = list.find(x => x.id === row.dataset.id);
     row.querySelector('[data-act="play"]').onclick = () => playSketch(s);
+    const art = row.querySelector('.sk-art');
+    row.querySelector('[data-act="see"]').onclick = () => { if (art.hidden) art.innerHTML = sketchArt(s); art.hidden = !art.hidden; };
+    const mb = row.querySelector('[data-act="midi"]'); if (mb) mb.onclick = () => MidiFile.download(s);
     const del = row.querySelector('.del');
     row.querySelector('[data-act="del"]').onclick = () => {
       del.innerHTML = '<span class="confirm">Delete for good? <button type="button" class="btn small" data-act="yes">Delete</button><button type="button" class="btn small ghost" data-act="no">Keep</button></span>';
-      del.querySelector('[data-act="yes"]').onclick = () => { Store.data.sketches = Store.data.sketches.filter(x => x.id !== s.id); Store.save(); renderSketchbook(); };
+      del.querySelector('[data-act="yes"]').onclick = () => { Store.data.sketches = Store.data.sketches.filter(x => x.id !== s.id); Store.data.picks = (Store.data.picks || []).filter(x => x.id !== s.id); Store.save(); renderSketchbook(); };
       del.querySelector('[data-act="no"]').onclick = () => renderSketchbook();
     };
   });

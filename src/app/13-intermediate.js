@@ -218,6 +218,10 @@ const EarGym = {
       if (rate >= 0.8) x.diff = Math.min(5, x.diff + 1); else if (rate < 0.5) x.diff = Math.max(1, x.diff - 1);
       Store.save();
       if (x.diff !== was) body.insertAdjacentHTML('beforeend', `<p class="fb ${x.diff > was ? 'good' : 'info'}">${s.label}: difficulty ${was} → ${x.diff}.</p>`);
+      /* a level-up is today's 1% */
+      if (x.diff > was) { Store.day().wins.push({ big: `${s.label}: ${was} → ${x.diff}`, small: 'Your Ear Gym difficulty went up for this skill: 80% or better at the old level. The next rounds ask more of your ears.' }); Store.save(); }
+      const log = Store.data.earLog || (Store.data.earLog = []);
+      log.push({ d: todayStr(), id: s.id, ok, n: total, diff: was }); if (log.length > 400) log.splice(0, log.length - 400);
       finish(ok, total);
     }, x.diff);
   }
@@ -398,7 +402,9 @@ const sketchById = id => (Store.data.sketches || []).find(s => s.id === id);
 
 /* Choose a flavour and a seed sketch. p: { project (unit id), prompt } */
 Tasks.projectSetup = (el, p, done) => {
-  const pr = projectOf(p.project), mine = (Store.data.sketches || []).slice(0, 6);
+  /* this week's and earlier Portfolio picks come first, then the newest sketches */
+  const all = Store.data.sketches || [], picked = (Store.data.picks || []).slice().reverse().map(x => all.find(s => s.id === x.id)).filter(Boolean);
+  const pr = projectOf(p.project), mine = picked.concat(all.filter(s => picked.indexOf(s) < 0)).slice(0, 8);
   el.innerHTML = `${p.prompt ? `<p class="prompt">${p.prompt}</p>` : ''}<div class="eyebrow">Flavour</div><div class="choices" data-fl>${Object.keys(PROJECT_FLAVOURS).map(k => `<button type="button" class="choice" data-k="${k}" aria-pressed="${pr.flavour === k}">${PROJECT_FLAVOURS[k].name}</button>`).join('')}</div><p class="fl-note muted"></p>
     <div class="eyebrow" style="margin-top:8px">Seed</div><div class="choices" data-seed><button type="button" class="choice" data-s="" aria-pressed="${!pr.seed}">Start fresh</button>${mine.map(s => `<button type="button" class="choice" data-s="${s.id}" aria-pressed="${pr.seed === s.id}">${esc(s.name)}</button>`).join('')}</div>
     <div class="row"><button type="button" class="btn small" data-act="hear" ${pr.seed ? '' : 'disabled'}>▶ Hear the seed</button></div><p class="fb info" aria-live="polite">Pick a flavour to go on.</p>`;
@@ -443,7 +449,7 @@ Tasks.review = (el, p, done) => {
   note.oninput = check;
   el.querySelector('[data-act="play"]').onclick = () => playSketch(s);
   save.onclick = () => {
-    s.review = { scores, note: note.value.trim(), at: todayStr() }; Store.save();
+    s.review = { scores, note: note.value.trim(), at: todayStr(), criteria: p.criteria.map(c => ({ id: c.id, label: c.label, help: c.help })) }; Store.save();
     const total = Object.values(scores).reduce((a, b) => a + b, 0);
     fb(el.querySelector('.fb'), 'good', `Saved: ${total} of ${p.criteria.length * 2}. Version 2 starts from your draft and your note.`);
     save.disabled = true; done(true, { scores });
@@ -451,24 +457,33 @@ Tasks.review = (el, p, done) => {
   return () => {};
 };
 
-/* Play draft and version 2 side by side, pick the stronger one and say why. p: { project, prompt } */
+/* Play draft and version 2 side by side, pick the stronger one and say why. p: { project, prompt }
+   If the draft was reviewed, version 2 can be rated on the same rubric (optional): the change in score is today's 1%. */
 Tasks.compare = (el, p, done) => {
   const pr = projectOf(p.project), a = sketchById(pr.draft), b = sketchById(pr.v2);
   if (!a || !b) { el.innerHTML = '<p class="fb bad">You need a draft and a version 2 first.</p>'; return () => {}; }
+  const crit = a.review && a.review.criteria ? a.review.criteria : null, scoresB = {};
   let pick = null;
   el.innerHTML = `${p.prompt ? `<p class="prompt">${p.prompt}</p>` : ''}<div class="ab"><div class="ab-side"><div class="eyebrow">A · draft</div><button type="button" class="btn" data-play="a">▶ Play A</button><button type="button" class="choice" data-pick="a" aria-pressed="false">A is stronger</button></div><div class="ab-side"><div class="eyebrow">B · version 2</div><button type="button" class="btn" data-play="b">▶ Play B</button><button type="button" class="choice" data-pick="b" aria-pressed="false">B is stronger</button></div></div>
+    ${crit ? `<details class="ab-rub"><summary>Rate version 2 on the same questions (optional)</summary><div class="rubric">${crit.map(c => `<fieldset class="rub" data-c="${c.id}"><legend><b>${c.label}</b>${c.help ? `<span class="muted small">${c.help}</span>` : ''}</legend><div class="choices">${RUBRIC_LEVELS.map((w, i) => `<button type="button" class="choice" data-v="${i}" aria-pressed="false">${w}</button>`).join('')}</div></fieldset>`).join('')}</div></details>` : ''}
     <div class="field"><label for="ab-why">Why, in one sentence</label><input id="ab-why" type="text" maxlength="160"></div><div class="row"><button type="button" class="btn primary" data-act="save" disabled>Save</button></div><p class="fb info" aria-live="polite">Revising does not always win. Saying why is the skill.</p>`;
   const why = el.querySelector('#ab-why'), save = el.querySelector('[data-act="save"]');
   const check = () => { save.disabled = !pick || !why.value.trim(); };
   el.addEventListener('click', ev => {
     const pl = ev.target.closest('[data-play]'); if (pl) playSketch(pl.dataset.play === 'a' ? a : b);
     const pk = ev.target.closest('[data-pick]'); if (pk) { pick = pk.dataset.pick; el.querySelectorAll('[data-pick]').forEach(x => x.setAttribute('aria-pressed', String(x === pk))); check(); }
+    const v = ev.target.closest('.ab-rub [data-v]'); if (v) { const fs = v.closest('[data-c]'); scoresB[fs.dataset.c] = +v.dataset.v; fs.querySelectorAll('[data-v]').forEach(x => x.setAttribute('aria-pressed', String(x === v))); }
   });
   why.oninput = check;
   save.onclick = () => {
     b.compare = { winner: pick === 'a' ? a.id : b.id, why: why.value.trim(), at: todayStr() };
-    if (pick === 'b' && a.review) { const before = Object.values(a.review.scores).reduce((x, y) => x + y, 0); Store.day().wins.push({ big: 'Version 2', small: `You judged your revision stronger than the draft (draft rubric ${before} of ${Object.keys(a.review.scores).length * 2}). That is the skill that keeps improving your music.` }); }
-    Store.save(); save.disabled = true; fb(el.querySelector('.fb'), 'good', 'Saved to the sketchbook with your reason.'); done(true, { winner: pick });
+    const sum = o => Object.values(o).reduce((x, y) => x + y, 0);
+    const rated = crit && Object.keys(scoresB).length === crit.length;
+    if (rated) b.review = { scores: Object.assign({}, scoresB), at: todayStr(), criteria: crit };
+    const max = a.review ? Object.keys(a.review.scores).length * 2 : 0;
+    if (rated && sum(scoresB) > sum(a.review.scores)) Store.day().wins.push({ big: `Rubric ${sum(a.review.scores)} → ${sum(scoresB)} of ${max}`, small: `Your own rating of “${b.name}” against the draft, on the same questions. Revising on purpose is how pieces get better.` });
+    else if (pick === 'b' && a.review) Store.day().wins.push({ big: 'Version 2', small: `You judged your revision stronger than the draft (draft rubric ${sum(a.review.scores)} of ${max}). That is the skill that keeps improving your music.` });
+    Store.save(); save.disabled = true; fb(el.querySelector('.fb'), 'good', 'Saved to the sketchbook with your reason.'); done(true, { winner: pick, scores: rated ? scoresB : null });
   };
   return () => {};
 };

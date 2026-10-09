@@ -383,6 +383,33 @@ addEarSkill({ id: 'rhythm', label: 'Rhythm dictation', unit: '6.3', run: (body, 
   return Tasks.rhythmDictation(body, { mode: 'choose', meter: m, bpm: m === '6/8' ? 102 + diff * 6 : 72 + diff * 4, rounds: 4, patterns: L6_DICT[m] }, (ok, r) => fin(r.score, 4));
 } });
 
+/* ---------- Listening Maps: real songs by title only; Motif plays its own groove in the same meter ---------- */
+const l6Groove = (meter, bpm) => () => Score.groove({ meter, bpm, bars: 2 });
+addListeningMap({ id: 'lm6-rising', level: 6, unit: '6.1', topic: 'Compound time', song: 'The House of the Rising Sun', artist: 'The Animals',
+  intro: 'The guitar picks out each chord as a steady stream of notes. Count them against the slow beat.', model: l6Groove('6/8', 120), modelLabel: 'Hear a 6/8 groove (Motif’s own)',
+  listenFor: [
+    { q: 'Tap your foot to the slow beat. How do the guitar’s notes fill each beat?', options: ['In twos', 'In threes', 'In fours'], answer: 1, why: 'Three notes to each beat: that is compound time, written in 6/8.' },
+    { q: 'So is it simple time (beats split in two) or compound time (beats split in three)?', options: ['Simple', 'Compound'], answer: 1, why: 'Compound: each beat splits in three.' }] });
+addListeningMap({ id: 'lm6-champions', level: 6, unit: '6.1', topic: 'Compound time', song: 'We Are the Champions', artist: 'Queen',
+  intro: 'A big, slow ballad that lilts. Feel where the beat is, then how it divides.', model: l6Groove('6/8', 100), modelLabel: 'Hear a slow 6/8 groove (Motif’s own)',
+  listenFor: [
+    { q: 'Sway to it. Does each beat split in two or in three?', options: ['Two', 'Three'], answer: 1, why: 'In three: the lilt of compound time. It is usually written in 6/8 or 12/8.' },
+    { q: 'Which meter fits it best?', options: ['4/4', '3/4', '6/8'], answer: 2, why: 'Two big beats a bar, each in three: 6/8.' }] });
+addListeningMap({ id: 'lm6-takefive', level: 6, unit: '6.4', topic: 'Odd meters', song: 'Take Five', artist: 'The Dave Brubeck Quartet',
+  intro: 'The piano repeats a short vamp all the way under the saxophone. Count the beats in one turn of it.', model: l6Groove('5/4', 168), modelLabel: 'Hear a 5/4 groove (Motif’s own)',
+  listenFor: [
+    { q: 'How many beats are in each bar of the piano vamp?', options: ['3', '4', '5', '7'], answer: 2, why: 'Five: the tune is famous for being in 5/4.' },
+    { q: 'How do the five beats group?', options: ['3 + 2', '2 + 3', '1 + 4'], answer: 0, why: 'Three then two: ONE two three FOUR five.' }] });
+addListeningMap({ id: 'lm6-mission', level: 6, unit: '6.4', topic: 'Odd meters', song: 'Mission: Impossible Theme', artist: 'Lalo Schifrin',
+  intro: 'The famous spy theme rides on a driving ostinato. Count the long and short notes of one bar.', model: l6Groove('5/4', 168), modelLabel: 'Hear a 5/4 groove (Motif’s own)',
+  listenFor: [
+    { q: 'How many beats are in each bar of the ostinato?', options: ['4', '5', '6'], answer: 1, why: 'Five: the theme is in 5/4.' }] });
+addListeningMap({ id: 'lm6-money', level: 6, unit: '6.4', topic: 'Changing meter', song: 'Money', artist: 'Pink Floyd',
+  intro: 'A bass riff opens the song and comes back again and again. Count it, then listen for what happens when the guitar solo starts.', model: l6Groove('7/4', 120), modelLabel: 'Hear a 7/4 groove (Motif’s own)',
+  listenFor: [
+    { q: 'How many beats are in one bar of the bass riff?', options: ['5', '6', '7', '8'], answer: 2, why: 'Seven: the riff is in 7/4.' },
+    { q: 'When the guitar solo starts, what happens to the meter?', options: ['It stays in 7', 'It changes to 4/4', 'It changes to 3/4'], answer: 1, why: 'The band switches to 4/4 for the solo, then returns to 7/4: a changing meter used for effect.' }] });
+
 /* ---------- the level ---------- */
 const L6_DAILY = [
   { meter: '4/4', bpm: 92, prompt: 'Eight bars in 4/4 that use one motive at least three times.' },
