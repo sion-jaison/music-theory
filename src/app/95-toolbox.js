@@ -1,8 +1,10 @@
 /* =================================================================
    Toolbox: always-open references that also listen.
    Listen (what am I playing?), Circle, Scales, Chords, Progressions, Hooks.
+   Studio: Transcribe (chords from a recording), Export MIDI (any sketch), Instruments (ranges and transpositions).
    ================================================================= */
 const TOOL_TABS = [['listen', 'Listen'], ['circle', 'Circle of Fifths'], ['scales', 'Scales'], ['chords', 'Chords'], ['progressions', 'Progressions'], ['hooks', 'Memory hooks']];
+const STUDIO_TABS = [['transcribe', 'Transcribe'], ['export', 'Export MIDI'], ['instruments', 'Instruments']];
 const SPELLED_ROOTS = ['C', 'C♯', 'D♭', 'D', 'E♭', 'E', 'F', 'F♯', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
 const SCALE_HOOKS = {
   major: 'Recipe 2-2-1-2-2-2-1: two matching halves (W W H) joined by a whole step. Every letter once.',
@@ -85,10 +87,12 @@ function renderToolbox(tab) {
   st.toolTab = tab; Store.save();
   view.innerHTML = `<section class="panel tools"><div class="level-head"><div><div class="eyebrow">Toolbox</div><h1>Look it up, hear it, play it</h1></div></div>
     <nav class="tool-tabs" aria-label="Tools">${TOOL_TABS.map(([k, n]) => `<button type="button" data-tab="${k}" aria-current="${k === tab ? 'true' : 'false'}">${n}</button>`).join('')}</nav>
+    <nav class="studio-tabs" aria-label="Studio"><span class="eyebrow">Studio</span>${STUDIO_TABS.map(([k, n]) => `<button type="button" data-tab="${k}" aria-current="${k === tab ? 'true' : 'false'}">${n}</button>`).join('')}</nav>
     <div class="tool-body"></div></section>`;
   view.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { runCleanup(); renderToolbox(b.dataset.tab); }; });
   const body = view.querySelector('.tool-body');
-  cleanup = ({ listen: toolListen, circle: toolCircle, scales: toolScales, chords: toolChords, progressions: toolProgressions, hooks: toolHooks })[tab](body) || null;
+  const tools = { listen: toolListen, circle: toolCircle, scales: toolScales, chords: toolChords, progressions: toolProgressions, hooks: toolHooks, transcribe: toolTranscribe, export: toolExport, instruments: toolInstruments };
+  cleanup = (tools[tab] || toolListen)(body) || null;
 }
 const selectHTML = (id, label, opts, val) => `<label class="sel" for="${id}"><span>${label}</span><select id="${id}">${opts.map(([v, t]) => `<option value="${esc(v)}"${v === val ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
 const noteChips = notes => `<div class="notes-strip">${notes.map(n => `<span class="n">${Theory.stripOct(n)}</span>`).join('')}</div>`;
@@ -242,11 +246,14 @@ function toolChords(el) {
 /* ---------- Progression player ---------- */
 function toolProgressions(el) {
   const st = Store.data.settings;
-  let pid = st.toolProg || 'pop', key = st.toolProgKey || 'C', bpm = 90;
-  el.innerHTML = `<div class="row tool-controls">${selectHTML('pr-id', 'Progression', Theory.PROGRESSIONS.map(p => [p.id, p.name]), pid)}${selectHTML('pr-key', 'Key', Theory.MAJOR_KEYS.slice(0, 12).map(k => [k, k]), key)}<label class="sel" for="pr-bpm"><span>Tempo</span><input id="pr-bpm" type="range" min="50" max="140" step="5" value="${bpm}"></label></div><div class="tool-out"></div><div class="try"></div>`;
+  let pid = st.toolProg || 'pop', key = st.toolProgKey || 'C', bpm = 90, band = Backing.STYLES[st.toolProgBand] ? st.toolProgBand : 'plain';
+  el.innerHTML = `<div class="row tool-controls">${selectHTML('pr-id', 'Progression', Theory.PROGRESSIONS.map(p => [p.id, p.name]), pid)}${selectHTML('pr-key', 'Key', Theory.MAJOR_KEYS.slice(0, 12).map(k => [k, k]), key)}${selectHTML('pr-band', 'Played by', [['plain', 'Chords only']].concat(Backing.STYLE_IDS.map(id => [id, Backing.STYLES[id].name + ' band'])), band)}<label class="sel" for="pr-bpm"><span>Tempo</span><input id="pr-bpm" type="range" min="50" max="140" step="5" value="${bpm}"></label></div><div class="tool-out"></div><div class="try"></div>`;
   const out = el.querySelector('.tool-out'), tryEl = el.querySelector('.try');
-  let inner = null, timers = [];
-  const stop = () => { timers.forEach(clearTimeout); timers = []; out.querySelectorAll('.prog-chord').forEach(c => c.classList.remove('on')); Keyboard.clearMarks(); };
+  let inner = null, timers = [], ctl = null;
+  /* a band plays brighter styles a little faster than the slider's plain-chord tempo */
+  const bandBpm = () => Math.round(bpm * (Backing.STYLES[band] && Backing.STYLES[band].bpm >= 120 ? 1.4 : 1));
+  const stop = () => { timers.forEach(clearTimeout); timers = []; if (ctl) { ctl.stop(); ctl = null; } out.querySelectorAll('.prog-chord').forEach(c => c.classList.remove('on')); Keyboard.clearMarks(); };
+  const light = (i, c) => { out.querySelectorAll('.prog-chord').forEach((x, k) => x.classList.toggle('on', k === i)); Keyboard.clearMarks(); if (c && c.notes) Keyboard.markPcs(c.notes.map(Theory.pc), 'hint'); };
   function paint() {
     stop(); if (inner) { inner(); inner = null; } tryEl.innerHTML = '';
     st.toolProg = pid; st.toolProgKey = key; Store.save();
@@ -257,9 +264,11 @@ function toolProgressions(el) {
       <div class="prog">${chords.map((c, i) => `<div class="prog-chord" data-i="${i}"><span class="mono">${c.roman}</span><b>${Theory.pretty(c.sym)}</b></div>`).join('')}</div>
       <p class="muted">Heard in: ${P.songs.join(', ')}.</p>
       <div class="hook">Keep the numbers, change the key: pick another key above and the same numbers give new chord names.</div>
+      ${band === 'plain' ? '' : `<p class="muted small">${esc(Backing.STYLES[band].desc)} The band loops until you stop it.</p>`}
       <div class="row"><button type="button" class="btn small" data-act="play">▶ Play</button><button type="button" class="btn small" data-act="stop">■ Stop</button><button type="button" class="btn small primary" data-act="try">Play it yourself</button></div>`;
     out.querySelector('[data-act="play"]').onclick = () => {
       stop();
+      if (band !== 'plain') { ctl = Backing.start({ style: band, chords, bpm: bandBpm(), onChord: i => light(i, chords[i]) }); return; }
       const beat = 60 / bpm, bar = beat * (P.id === 'blues' ? 4 : 2);
       playChordList(chords.map((c, i) => ({ sym: c.sym, t: i * bar, d: bar * 0.95 })));
       chords.forEach((c, i) => timers.push(setTimeout(() => {
@@ -273,7 +282,8 @@ function toolProgressions(el) {
   }
   el.querySelector('#pr-id').onchange = e => { pid = e.target.value; paint(); };
   el.querySelector('#pr-key').onchange = e => { key = e.target.value; paint(); };
-  el.querySelector('#pr-bpm').oninput = e => { bpm = +e.target.value; };
+  el.querySelector('#pr-band').onchange = e => { band = e.target.value; st.toolProgBand = band; Store.save(); paint(); };
+  el.querySelector('#pr-bpm').oninput = e => { bpm = +e.target.value; if (ctl) ctl.setTempo(bandBpm()); };
   paint();
   return () => { stop(); if (inner) inner(); };
 }
@@ -283,4 +293,67 @@ function toolHooks(el) {
   const reached = currentLevel();
   el.innerHTML = `<p class="lead">Every recipe, saying and song anchor from the course. Hooks from levels you have not reached yet are shown faded; peek if you like.</p>
     <div class="hooks">${LEVELS.map(l => `<section class="hook-group${l.n > reached ? ' later' : ''}"><h3><span class="mono">Level ${l.n}</span> ${l.title}</h3>${HOOKS.filter(h => h[0] === l.n).map(h => `<div class="hook"><b>${h[1]}.</b> ${h[2]}</div>`).join('')}</section>`).join('')}</div>`;
+}
+
+/* ---------- Studio: Transcribe ---------- */
+function toolTranscribe(el) {
+  const tr = Transcribe.mount(el, { need: 0, save: { tags: ['toolbox'] } });
+  return () => tr.destroy();
+}
+
+/* ---------- Studio: export any sketch as a MIDI file ---------- */
+function toolExport(el) {
+  const list = Store.data.sketches || [];
+  const what = s => {
+    const bits = [];
+    if ((s.notes || []).length || (s.score && s.score.events)) bits.push('melody');
+    if ((s.chords || []).length) bits.push(s.chords.length + ' chord' + (s.chords.length === 1 ? '' : 's'));
+    if ((s.parts || []).length) bits.push(s.parts.length + ' part' + (s.parts.length === 1 ? '' : 's'));
+    if (s.voices) bits.push('four voices');
+    return bits.join(' · ') || 'empty';
+  };
+  el.innerHTML = `<p class="lead">Download any sketch as a MIDI file and finish it in any music software or notation program. The melody, the chords, the bass and every part get a track of their own, with the tempo, meter and key.</p>
+    ${list.length ? `<div class="row tool-controls">${selectHTML('ex-band', 'Add a band', [['', 'No band']].concat(Backing.STYLE_IDS.map(id => [id, Backing.STYLES[id].name])), '')}</div>
+    <p class="muted small">A band adds drums, bass and chords in that style to sketches that have chords.</p>
+    <ul class="ex-list">${list.map((s, i) => `<li class="ex-item"><div class="ex-what"><b>${esc(s.name || 'Untitled')}</b><span class="muted small">${esc(what(s))}${s.created ? ' · ' + esc(s.created) : ''}</span></div><div class="row"><button type="button" class="btn small" data-ex-play="${i}">▶ Play</button><button type="button" class="btn small primary" data-ex="${i}">Download MIDI</button></div></li>`).join('')}</ul>`
+    : '<p class="hook">Nothing in your sketchbook yet. Save an idea in a lesson, then come back to take it further.</p>'}
+    <p class="fb info" data-ex-fb aria-live="polite"></p>`;
+  const f = el.querySelector('[data-ex-fb]'), bandSel = el.querySelector('#ex-band');
+  el.querySelectorAll('[data-ex]').forEach(b => { b.onclick = () => {
+    const s = list[+b.dataset.ex], band = bandSel ? bandSel.value : '';
+    const r = MidiFile.download(band && (s.chords || []).length ? Object.assign({}, s, { backing: { style: band } }) : s);
+    fb(f, r.ok ? 'good' : 'warn', r.ok ? `Saved ${r.name}.` : 'This browser cannot save files from this page.');
+  }; });
+  el.querySelectorAll('[data-ex-play]').forEach(b => { b.onclick = () => playSketch(list[+b.dataset.exPlay]); });
+  return () => stopSketch();
+}
+
+/* ---------- Studio: instruments, their ranges and transpositions ---------- */
+const INS_SAY = { 0: 'sounds as written', 2: 'sounds a major 2nd lower than written', 7: 'sounds a perfect 5th lower than written', 9: 'sounds a major 6th lower than written', 12: 'sounds an octave lower than written', 14: 'sounds a major 9th (an octave and a step) lower than written', '-12': 'sounds an octave higher than written' };
+function toolInstruments(el) {
+  const st = Store.data.settings;
+  let id = Instruments.byId(st.toolIns) ? st.toolIns : 'clarinet', key = st.toolInsKey || 'E♭';
+  const cap = s => s[0].toUpperCase() + s.slice(1);
+  const opts = Instruments.FAMILIES.map(fam => `<optgroup label="${fam}">${INSTRUMENTS.filter(x => x.family === fam).map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(cap(x.name))}</option>`).join('')}</optgroup>`).join('');
+  const keys = ['C', 'G', 'D', 'A', 'E', 'B', 'F', 'B♭', 'E♭', 'A♭', 'D♭', 'G♭'];
+  el.innerHTML = `<div class="row tool-controls"><label class="sel" for="in-id"><span>Instrument</span><select id="in-id">${opts}</select></label>${selectHTML('in-key', 'Concert key', keys.map(k => [k, k + ' major']), key)}</div><div class="tool-out"></div>`;
+  const out = el.querySelector('.tool-out');
+  function paint() {
+    st.toolIns = id; st.toolInsKey = key; Store.save();
+    const x = Instruments.byId(id), wr = m => Theory.fromMidi(Instruments.written(m, x), true);
+    out.innerHTML = `<h2>${esc(cap(x.name))} <span class="muted small">${x.family}</span></h2>
+      <p>The ${esc(x.short)} ${INS_SAY[-x.transpose] || 'moves ' + x.transpose + ' half steps from written to sounding'}.${x.note ? ' ' + esc(x.note) : ''}</p>
+      <table class="tbl"><tr><th>Range (sounding)</th><td class="mono">${x.names.low}–${x.names.high}</td></tr>
+        ${x.transpose ? `<tr><th>Range (written)</th><td class="mono">${wr(x.range.low)}–${wr(x.range.high)}</td></tr>` : ''}
+        <tr><th>Sounds best</th><td class="mono">${x.comfortNames.low}–${x.comfortNames.high}</td></tr>
+        <tr><th>Clef</th><td>${x.clefs.map(c => c + ' clef').join(', ')}</td></tr>
+        <tr><th>Concert ${esc(key)} major</th><td>${x.transpose % 12 ? `written in <b>${esc(Instruments.writtenKey(key, x))} major</b>` : 'written in the same key'}</td></tr></table>
+      <div class="row"><button type="button" class="btn small" data-act="low">▶ Lowest notes</button><button type="button" class="btn small" data-act="high">▶ Highest notes</button></div>`;
+    const run = (a, dir) => Sound.seq([0, 2, 4, 5, 7].map((s, i) => ({ m: a + dir * s, t: i * 0.3, d: 0.32 })));
+    out.querySelector('[data-act="low"]').onclick = () => run(x.range.low, 1);
+    out.querySelector('[data-act="high"]').onclick = () => run(x.range.high, -1);
+  }
+  el.querySelector('#in-id').onchange = e => { id = e.target.value; paint(); };
+  el.querySelector('#in-key').onchange = e => { key = e.target.value; paint(); };
+  paint();
 }

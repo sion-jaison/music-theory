@@ -22,4 +22,6 @@ window.Motif = { Theory, Tasks, Staff, Circle, ChordIn, Store, Bus, Sound, Keybo
 Object.assign(window.Motif, { ChordSheet, SheetHas, csPlay, addListeningMap, LISTENING_MAPS, listeningThisWeek, listeningOpen, weekKey, projectOf, sketchById, levelUnlocked });
 /* voices: the voice-leading checker, multi-voice notation, the part-writing editor */
 Object.assign(window.Motif, { VoiceLead, VoiceView, PartWriter });
+/* the studio tools: backing styles, MIDI export, Transcribe, instrument data */
+Object.assign(window.Motif, { Backing, MidiFile, Transcribe, Instruments, INSTRUMENTS, playSketch, stopSketch });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

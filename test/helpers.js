@@ -16,12 +16,17 @@ async function load(opts) {
   const dom = new JSDOM(html, {
     url: 'http://localhost/', runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(w) {
-      const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
-      const node = () => ({ connect() {}, disconnect() {}, start() {}, stop() {}, gain: param(), frequency: param(), type: '' });
+      /* params remember their automation (ev: [kind, value, time]) so tests can see a fade or a mute */
+      const param = () => ({ value: 0, ev: [], setValueAtTime(v, t) { this.ev.push(['set', v, t]); }, linearRampToValueAtTime(v, t) { this.ev.push(['lin', v, t]); }, exponentialRampToValueAtTime(v, t) { this.ev.push(['exp', v, t]); } });
+      const node = () => ({ connect() {}, disconnect() {}, start() {}, stop() {}, gain: param(), frequency: param(), detune: param(), Q: param(), playbackRate: param(), type: '' });
       w.scrollTo = () => {};
       w.AudioContext = function () { this.state = 'running'; this.sampleRate = 48000; this.destination = {}; };
       Object.defineProperty(w.AudioContext.prototype, 'currentTime', { get() { return w.performance.now() / 1000; } });
-      Object.assign(w.AudioContext.prototype, { resume() {}, createGain: node, createOscillator: node, createBiquadFilter: node });
+      Object.assign(w.AudioContext.prototype, { resume() {}, createGain: node, createOscillator: node, createBiquadFilter: node,
+        /* buffers, buffer sources, analysers and media sources for the studio tools (no real audio: analysers hear silence) */
+        createBuffer(ch, len, sr) { const data = Array.from({ length: ch }, () => new Float32Array(len)); return { numberOfChannels: ch, length: len, sampleRate: sr, duration: len / sr, getChannelData: i => data[i] }; },
+        createBufferSource: node, createMediaElementSource: node,
+        createAnalyser() { return Object.assign(node(), { fftSize: 2048, smoothingTimeConstant: 0.8, get frequencyBinCount() { return this.fftSize / 2; }, getFloatFrequencyData(a) { a.fill(-120); }, getFloatTimeDomainData(a) { a.fill(0); }, getByteFrequencyData(a) { a.fill(0); } }); } });
       w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
       w.console.error = (...a) => errors.push(a.join(' '));
       w.addEventListener('error', e => errors.push(e.message));
