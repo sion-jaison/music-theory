@@ -299,7 +299,7 @@ const rubricSum = r => r && r.scores ? Object.values(r.scores).reduce((a, b) => 
 function sketchArt(s) {
   try {
     if (s.score && s.score.events) return `<div class="nt-box">${Score.svg(s.score.events, { meter: s.score.meter, keySig: s.score.keySig || 0 })}</div>`;
-    if (typeof VoiceView !== 'undefined' && s.voices) return `<div class="nt-box">${VoiceView.svg({ voices: s.voices })}</div>`;
+    if (typeof VoiceView !== 'undefined' && s.voices) return `<div class="vv-box">${VoiceView.svg({ voices: s.voices, labels: s.romans, style: s.style, key: s.key })}</div>`;
     if (s.notes && s.notes.length) return `<div class="nt-box">${Staff.svg({ clef: 'treble', notes: s.notes.slice(0, 32).map(n => Theory.fromMidi(n.m)) })}</div>`;
   } catch (e) { /* fall through */ }
   return '<p class="muted small">No notation for this one.</p>';
